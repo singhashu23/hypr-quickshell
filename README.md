@@ -10,7 +10,7 @@ rebuild of the setup around [Quickshell](https://quickshell.org/).
 config/       ~/.config/<name>  — drop-in replacements
   hypr/         Hyprland compositor + hyprpaper
   waybar/       status bar (current)
-  quickshell/   QML shell components (bar, launcher, dashboard, powermenu, wifi)
+  quickshell/   the new Quickshell shell (see below)
   ags/          older Astal/AGS bar attempt
   rofi/ wofi/ fuzzel/    launchers
   dunst/ swaync/         notification daemons
@@ -18,7 +18,50 @@ config/       ~/.config/<name>  — drop-in replacements
   wlogout/      logout menu
 bin/          ~/.local/bin — helper scripts (see below)
 wallpapers/   wall, wall_1, wall_3, wall_4
+reference/    old-quickshell/ — the previous QML, kept for reference
 ```
+
+## Quickshell
+
+A fresh shell targeting **Hyprland**, replacing waybar + rofi + dunst.
+Built against Quickshell 0.3.1 / Hyprland 0.56.2.
+
+```
+config/quickshell/
+  shell.qml              one Bar per connected screen, via Variants
+  Theme.qml              singleton: palette (Catppuccin Mocha), metrics, fonts
+  modules/bar/
+    Bar.qml              PanelWindow — left / center / right layout
+    Pill.qml             shared rounded container (hover, click, scroll)
+    IconLabel.qml        shared icon + text pair
+    Workspaces.qml       Hyprland workspaces, click to switch
+    ActiveWindow.qml     focused window title (via ToplevelManager)
+    MediaPlayer.qml      MPRIS — click to play/pause
+    Tray.qml             StatusNotifierItem tray
+    Backlight.qml        brightnessctl, scroll to adjust
+    Audio.qml            Pipewire — click to mute, scroll for volume
+    Network.qml          nmcli — SSID and signal
+    Battery.qml          UPower
+    Clock.qml            click to toggle seconds
+```
+
+Run it:
+
+```sh
+qs -p ~/.config/quickshell        # foreground, logs to stdout
+qs -p ~/.config/quickshell -d     # daemonized
+```
+
+To start it with the session, in `hyprland.conf`:
+
+```
+exec-once = qs -p ~/.config/quickshell
+```
+
+Notes:
+- Modules degrade instead of erroring: `Workspaces` is empty off Hyprland,
+  `Battery` hides without one, `MediaPlayer` and `Tray` hide when empty.
+- `Theme.qml` is the single place to retheme.
 
 ## Install
 
@@ -69,5 +112,5 @@ deliberately excluded — they are build outputs, not configuration.
 
 ## Next
 
-Rebuild the shell in Quickshell — bar, launcher, notifications, dashboard,
-power menu — replacing waybar + rofi + dunst.
+Still to build in Quickshell: launcher, notification daemon, dashboard,
+power menu, and a lock screen.
