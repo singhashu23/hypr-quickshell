@@ -1,0 +1,5 @@
+.claude/
+*.bak
+*.bak.*
+*~
+.DS_Store

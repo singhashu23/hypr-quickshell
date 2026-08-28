@@ -1,0 +1,11 @@
+#!/bin/sh
+
+wall=$(find ~/Pictures/Nature -type f -name "*.jpg" -o -name "*.png" | shuf -n 1)
+swww img $wall --transition-type outer --transition-step 255 --transition-pos 0.95,0.90
+wal -c 
+wal -i $wall
+convert -scale 50% -blur 4x2 -resize 100% $wall ~/Pictures/rofi/current.blur & disown
+alacrittyColosrs.sh & disown
+killall waybar
+waybar & disown
+cp $wall ~/Pictures/current.jpg

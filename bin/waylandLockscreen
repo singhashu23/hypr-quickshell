@@ -1,0 +1,9 @@
+#!/bin/bash
+
+swaylock -i $(find ~/Pictures/wall -type f -name "*.jpg" -o -name "*.png"|shuf -n 1) \
+  --effect-blur 7x5 \
+  --indicator \
+  --clock \
+  --fade-in 0.2
+
+

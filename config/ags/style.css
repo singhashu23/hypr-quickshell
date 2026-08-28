@@ -1,0 +1,29 @@
+window.bar-window {
+    background-color: transparent; /* Makes the main bar invisible */
+    font-family: "Inter", "Ubuntu", sans-serif;
+    font-size: 13px;
+}
+
+.pill {
+    background-color: #f5f5dc; /* Cream background from your screenshot */
+    color: #1a1a1a;
+    border-radius: 15px;
+    padding: 2px 12px;
+    margin: 4px;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+/* Workspace styling */
+.workspaces button {
+    padding: 0 4px;
+    color: #666;
+}
+
+.workspaces button.focused {
+    color: #000;
+    font-weight: bold;
+}
+
+.clock {
+    font-weight: bold;
+}

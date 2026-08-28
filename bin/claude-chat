@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# claude-chat <session-name> [claude args...]
+#
+# Launches Claude Code in ~/claudeChats/<session-name>/, creating the folder on
+# first use. Hooks installed into that folder mine every transcript into
+# MemPalace in the background, under a wing named after the session.
+#
+# Override the root with CLAUDE_CHAT_ROOT.
+
+set -euo pipefail
+
+ROOT="${CLAUDE_CHAT_ROOT:-$HOME/claudeChats}"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: claude-chat <session-name> [claude args...]
+
+  Opens (or resumes) a named chat session. Transcripts are saved to
+  MemPalace in the background under a wing matching <session-name>.
+
+  claude-chat rust-parser          # start/resume session "rust-parser"
+  claude-chat rust-parser --resume # extra args go through to `claude`
+  claude-chat --list               # show existing sessions
+EOF
+}
+
+name="${1:-}"
+
+case "$name" in
+  ""|-h|--help)
+    usage
+    [ -z "$name" ] && exit 2 || exit 0
+    ;;
+  --list|-l)
+    if [ -d "$ROOT" ]; then
+      find "$ROOT" -mindepth 1 -maxdepth 1 -type d \
+        ! -name '.*' -printf '%f\n' 2>/dev/null | sort
+    fi
+    exit 0
+    ;;
+esac
+
+shift
+
+# The name becomes a directory, a wing, and part of a shell command in the
+# hook config. Restricting it to this charset keeps all three unambiguous and
+# makes the generated JSON safe without escaping gymnastics.
+if ! [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "claude-chat: invalid session name '$name'" >&2
+  echo "  use letters, digits, dot, dash, underscore; must start alphanumeric" >&2
+  exit 2
+fi
+
+command -v mempalace >/dev/null 2>&1 || {
+  echo "claude-chat: mempalace not found on PATH" >&2; exit 1; }
+command -v claude-chat-mine >/dev/null 2>&1 || {
+  echo "claude-chat: claude-chat-mine not found on PATH" >&2; exit 1; }
+
+dir="$ROOT/$name"
+settings="$dir/.claude/settings.json"
+
+mkdir -p "$dir/.claude"
+
+if [ ! -e "$settings" ]; then
+  # Stop      -> checkpoint after each assistant turn
+  # PreCompact-> capture context before it is compacted away
+  # SessionEnd-> final flush
+  cat > "$settings" <<EOF
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-chat-mine $name" }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-chat-mine $name" }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "claude-chat-mine $name" }
+        ]
+      }
+    ]
+  }
+}
+EOF
+  echo "claude-chat: created session '$name' -> $dir"
+elif ! grep -q 'claude-chat-mine' "$settings" 2>/dev/null; then
+  # Someone hand-edited this file; refuse to clobber their work.
+  echo "claude-chat: warning: $settings exists without a claude-chat-mine hook." >&2
+  echo "  Transcripts for '$name' will NOT be saved until you add it back." >&2
+fi
+
+cd "$dir"
+exec claude "$@"

@@ -1,0 +1,14 @@
+#!/bin/sh
+
+wall=$(find ~/Pictures/wall -type f -name "*.jpg" -o -name "*.png" | shuf -n 1)
+awww kill
+awww-daemon & disown
+awww img $wall
+wal -c
+wal -i $wall
+convert -scale 50% -blur 4x2 -resize 100% $wall ~/Pictures/rofi/current.blur & disown
+alacrittyColosrs.sh & disown
+killall qs
+pkill -f 'notifications.qml'
+qs & disown
+cp $wall ~/Pictures/current.jpg

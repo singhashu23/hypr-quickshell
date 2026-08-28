@@ -1,0 +1,81 @@
+@import url("/home/ashu/.cache/wal/colors-waybar.css");
+
+window {
+    font-family: JetBrains Mono;
+    font-size: 14pt;
+    color: #cdd6f4; /* text */
+    background-color: @background;
+    opacity: 0.9;
+}
+
+button {
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 25%;
+    border: none;
+    background-color: rgba(30, 30, 46, 0);
+    margin: 5px;
+    transition: box-shadow 0.2s ease-in-out, background-color 0.2s ease-in-out;
+    opacity: 1.0;
+}
+
+button:hover {
+    background-color: rgba(49, 50, 68, 0.1);
+    opacity: 1.0;
+}
+
+button:focus {
+    background-color: #cba6f7;
+    color: #1e1e2e;
+    opacity: 1.0;
+}
+
+#lock {
+    background-image: image(url("./lock.png"));
+    opacity: 1.0;
+}
+#lock:focus {
+    background-image: image(url("./lock-hover.png"));
+    background-color:@foreground;
+    opacity: 1.0;
+}
+
+#logout {
+    background-image: image(url("./logout.png"));
+    opacity: 1.0;
+}
+#logout:focus {
+    background-image: image(url("./logout-hover.png"));
+    background-color:@foreground;
+    opacity: 1.0;
+}
+
+#suspend {
+    background-image: image(url("./sleep.png"));
+    opacity: 1.0;
+}
+#suspend:focus {
+    background-image: image(url("./sleep-hover.png"));
+    background-color:@foreground;
+    opacity: 1.0;
+}
+
+#shutdown {
+    background-image: image(url("./power.png"));
+    opacity: 1.0;
+}
+#shutdown:focus {
+    background-image: image(url("./power-hover.png"));
+    background-color:#ff1a0e;
+    opacity: 1.0;
+}
+
+#reboot {
+    background-image: image(url("./restart.png"));
+    opacity: 1.0;
+}
+#reboot:focus {
+    background-image: image(url("./restart-hover.png"));
+    background-color:#4ed34e;
+    opacity: 1.0;
+}

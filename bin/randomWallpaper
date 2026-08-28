@@ -1,0 +1,10 @@
+#!/bin/sh
+
+wall=$(find ~/Pictures/wall -type f -name "*.jpg" -o -name "*.png" | shuf -n 1)
+echo "$wall"
+swaybg -m fill -i $wall &
+
+wal -c
+wal -i $wall
+alacrittyColors.sh
+waybar

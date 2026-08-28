@@ -1,0 +1,5 @@
+#!/bin/sh 
+
+walp=$(ps aux |grep swaybg |head -1)
+
+echo $walp

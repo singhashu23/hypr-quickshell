@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Claude Code hook helper for `claude-chat`.
+#
+# Reads the hook JSON payload on stdin, pulls out `transcript_path`, and mines
+# that session's transcript into MemPalace under a per-session wing.
+#
+# Contract with the harness: never block, never fail the session. Every exit
+# path is 0 and the mine itself is detached.
+#
+# usage: claude-chat-mine <wing>   (stdin = hook JSON)
+
+set -uo pipefail
+
+WING="${1:-}"
+[ -n "$WING" ] || exit 0
+
+STATE_DIR="$HOME/.mempalace/hook_state/claude-chat"
+LOG="$STATE_DIR/mine.log"
+
+payload=$(cat 2>/dev/null || true)
+[ -n "$payload" ] || exit 0
+
+# Extract transcript_path without assuming key order or extra fields.
+transcript=$(
+  printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get("transcript_path", "") or "")
+except Exception:
+    print("")
+' 2>/dev/null
+) || exit 0
+
+[ -n "$transcript" ] || exit 0
+transcript="${transcript/#\~/$HOME}"
+[ -f "$transcript" ] || exit 0
+
+# mempalace mines a directory, not a single file; the transcript's parent is
+# this project's session dir under ~/.claude/projects/.
+src=$(dirname "$transcript")
+[ -d "$src" ] || exit 0
+
+mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
+
+# Stop fires after every assistant turn. Without a guard those pile into
+# concurrent mines over the same source, which mempalace's own hook code warns
+# corrupts the HNSW index (#1212, #1206). flock -n drops a fire whose
+# predecessor is still running; the transcript is re-read next fire anyway, so
+# nothing is lost.
+lock="$STATE_DIR/$WING.lock"
+
+setsid nohup flock -n "$lock" \
+  mempalace mine "$src" \
+    --mode convos \
+    --wing "$WING" \
+    --agent claude-chat \
+  >>"$LOG" 2>&1 &
+
+exit 0

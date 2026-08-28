@@ -1,0 +1,8 @@
+#!/bin/bash
+
+swayidle -w \
+  timeout 300 'swaylock -i $(find ~/Pictures/wall -type f -name "*.jpg" -o -name "*.png"|shuf -n 1) --effect-blur 7x5 --indicator --clock --fade-in 0.2' \
+  timeout 600 'hyprctl dispatch dpms off' \
+  resume 'hyprctl dispatch dpms on'
+
+

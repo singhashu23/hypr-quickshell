@@ -1,0 +1,46 @@
+window {
+    border-radius: 10px;
+    margin: 5px;
+    border: 2px solid rgb(100, 100, 230);
+    background-color: #343445;
+}
+    
+#input {
+    border-radius: 25px;
+    margin: 5px;
+    border: 2px solid rgb(42, 42, 54);
+    background-color: rgb(47, 47, 63);
+}
+    
+#inner-box {
+    //border-radius: 25px;
+    margin: 5px;
+    border: 2px #343445;
+    background-color: rgb(47, 47, 63);
+}
+    
+#outer-box {
+    border-radius: 25px;
+    margin: 5px;
+    border: 2px solid #343445;
+    background-color: #343445;
+}
+    
+#scroll {
+    border-radius: 25px;
+    margin: 5px;
+    border: 2px solid #343445;
+    background-color: #343445;
+}
+
+#img{
+    margin: 5px;
+}
+
+#text {
+    //vborder-radius: 25px;
+    //border-radius: 25px;
+    margin: 5px;
+    border: 2px;
+    //background-color: purple;
+}

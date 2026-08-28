@@ -1,0 +1,25 @@
+@import "~/.cache/wal/colors-rofi-dark.rasi"
+
+* {
+    background-color:       @background;
+    text-color:             @foreground;
+	font:				 	"JetBrains Mono Nerd Font 10";
+}
+
+window {
+    width:      			30%;
+    height:                             7%;
+    padding:    			20px;
+    border:					1px;
+    border-radius:          14px;
+    border-color:           @selected-active-background;
+    location:               center;
+    x-offset:               0;
+    y-offset:               -4%;
+}
+
+entry {
+    expand: 				true;
+    width: 					150px;
+    text-color:				@selected-active-foreground;
+}
