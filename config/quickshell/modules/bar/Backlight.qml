@@ -37,7 +37,7 @@ Pill {
 
     IconLabel {
         icon: root.pct > 66 ? "󰃠" : root.pct > 33 ? "󰃟" : "󰃞"
-        color: Theme.yellow
+        color: Theme.peach
         label: root.pct + "%"
     }
 }

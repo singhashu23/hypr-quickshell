@@ -17,6 +17,7 @@ config/       ~/.config/<name>  — drop-in replacements
   kitty/ ghostty/ foot/  terminals
   wlogout/      logout menu
 bin/          ~/.local/bin — helper scripts (see below)
+config/wal/   pywal templates
 wallpapers/   wall, wall_1, wall_3, wall_4
 reference/    old-quickshell/ — the previous QML, kept for reference
 ```
@@ -63,6 +64,39 @@ Notes:
   `Battery` hides without one, `MediaPlayer` and `Tray` hide when empty.
 - `Theme.qml` is the single place to retheme.
 
+## pywal
+
+The whole desktop follows the wallpaper's palette.
+
+`randWall` picks a wallpaper, sets it with `awww`, and runs `wal`, which
+regenerates `~/.cache/wal/`. From there two consumers pick it up:
+
+**Quickshell** — `services/Pywal.qml` reads `~/.cache/wal/colors.json` through a
+`FileView` with `watchChanges: true`, so the bar retints the instant pywal
+rewrites the file. No restart, no signal, no reload command.
+
+**Hyprland** — `config/wal/templates/colors-hyprland.conf` makes pywal emit
+`~/.cache/wal/colors-hyprland.conf` in Hyprland syntax (`$color0` … `$color15`).
+`hyprland.conf` sources it and uses `$color4`/`$color6` for the active border.
+Hyprland can't watch the file, so `randWall` calls `hyprctl reload`.
+
+Install the template (pywal only reads templates from `~/.config/wal/templates`):
+
+```sh
+mkdir -p ~/.config/wal/templates
+cp config/wal/templates/colors-hyprland.conf ~/.config/wal/templates/
+```
+
+Theming controls in `Theme.qml`:
+
+| property | default | effect |
+| --- | --- | --- |
+| `usePywal` | `true` | derive backgrounds, text and accents from the wallpaper; `false` pins the built-in Catppuccin Mocha |
+| `pywalStatusColors` | `false` | also tint low-battery / offline red, charging green, etc. Off by default — pywal palettes are often near-monochrome, and a warning tinted to match the wallpaper stops reading as a warning |
+
+If `~/.cache/wal/colors.json` is missing, the shell falls back to Catppuccin
+rather than failing.
+
 ## Install
 
 ```sh
@@ -103,11 +137,14 @@ deliberately excluded — they are build outputs, not configuration.
 ## Known rough edges
 
 - `config/hypr/hyprpaper.conf` still points at `/home/ashu/Pictures/1.jpg` — a
-  stale username from an older install. Fix the path before use.
+  stale username from an older install. It is unused (wallpapers go through
+  `awww`), so it can probably just be deleted.
+- `monitor=DP-4` in `hyprland.conf` does not match this machine's outputs,
+  which are `DP-1` and `eDP-1`.
 - `config/hypr/` carries four generations of config (`hyprland.conf` plus
   `hyprland1/2/3.conf`); only `hyprland.conf` is live.
-- Wallpaper scripts call `awww` (a typo for `swww`) and `alacrittyColosrs.sh`
-  (typo for `alacrittyColors.sh`), so they currently fail silently.
+- `randWall` called `alacrittyColosrs.sh`, which does not exist (the script is
+  `alacrittyColors.sh`) — fixed.
 - The machine is presently running **niri**, not Hyprland.
 
 ## Next

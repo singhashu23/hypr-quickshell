@@ -1,11 +1,25 @@
 #!/bin/sh
+# Pick a random wallpaper, regenerate the pywal palette, and push the new
+# colors everywhere that needs telling.
 
-wall=$(find ~/Pictures/wall -type f -name "*.jpg" -o -name "*.png" | shuf -n 1)
-awww img $wall --transition-type outer --transition-step 255 --transition-pos 0.95,0.90
-wal -c 
-wal -i $wall
-convert -scale 50% -blur 4x2 -resize 100% $wall ~/Pictures/rofi/current.blur & disown
-alacrittyColosrs.sh & disown
-killall waybar
-waybar & disown
-cp $wall ~/Pictures/current.jpg
+wall=$(find ~/Pictures/wall -type f \( -name "*.jpg" -o -name "*.png" \) | shuf -n 1)
+[ -n "$wall" ] || { echo "randWall: no wallpapers in ~/Pictures/wall" >&2; exit 1; }
+
+awww img "$wall" --transition-type outer --transition-step 255 --transition-pos 0.95,0.90
+
+# regenerate ~/.cache/wal/* — including colors-hyprland.conf
+wal -c
+wal -i "$wall"
+
+# blurred copy for the rofi/launcher background
+magick "$wall" -scale 50% -blur 4x2 -resize 100% ~/Pictures/rofi/current.blur 2>/dev/null &
+
+alacrittyColors.sh >/dev/null 2>&1 &
+
+# Hyprland re-reads the sourced color file; Quickshell watches colors.json
+# itself and retints without being told.
+if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    hyprctl reload >/dev/null 2>&1
+fi
+
+cp "$wall" ~/Pictures/current.jpg

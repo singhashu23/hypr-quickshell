@@ -1,13 +1,15 @@
 #!/bin/sh
+# Session-start wallpaper: bring up the awww daemon, then apply a random one.
 
-wall=$(find ~/Pictures/wall -type f -name "*.jpg" -o -name "*.png" | shuf -n 1)
-awww kill
-awww-daemon & disown
-awww img $wall
-wal -c 
-wal -i $wall
-convert -scale 50% -blur 4x2 -resize 100% $wall ~/Pictures/rofi/current.blur & disown
-alacrittyColosrs.sh & disown
-killall waybar
-waybar & disown
-cp $wall ~/Pictures/current.jpg
+awww kill >/dev/null 2>&1
+awww-daemon >/dev/null 2>&1 &
+
+# wait for the daemon's socket rather than racing it
+i=0
+while [ $i -lt 50 ]; do
+    awww query >/dev/null 2>&1 && break
+    i=$((i + 1))
+    sleep 0.1
+done
+
+exec randWall
