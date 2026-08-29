@@ -80,9 +80,10 @@ One island, three tabs — the same three the niri launcher carries:
 | **Windows** | what is already open, with each window's own icon | focuses it |
 | **Calculator** | a keypad over the search field | folds the result back into the expression |
 
-`Tab` / `Shift+Tab` cycle the tabs; `Up`/`Down` move within a list; `Enter`
-activates. Each tab can also be opened directly over IPC, for a keybind of its
-own:
+`Tab` / `Shift+Tab` or `←` / `→` move between tabs; `Up`/`Down` move within a
+list; `Enter` activates. Left and right therefore do not move the text caret —
+`Home`/`End` and the mouse still do. Each tab can also be opened directly over
+IPC, for a keybind of its own:
 
 ```sh
 qs -c hyprland ipc call launcher windows

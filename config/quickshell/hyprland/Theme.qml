@@ -72,6 +72,11 @@ Singleton {
     // hairline that lifts an island off the wallpaper
     readonly property color border: alpha(mix(accent, bone, 0.35), 0.22)
 
+    // what "this one is selected" looks like everywhere: the accent, at the
+    // weight a filled row can carry without fighting the type on top of it
+    readonly property color selection:       alpha(accent, 0.28)
+    readonly property color selectionBorder: alpha(accent, 0.55)
+
     // ---- status: must keep reading as signals ----
     readonly property color red:    pywalStatusColors && wal ? Pywal.color(1, "#f38ba8") : "#f38ba8"
     readonly property color green:  pywalStatusColors && wal ? Pywal.color(2, "#a6e3a1") : "#a6e3a1"

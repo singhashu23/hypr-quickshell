@@ -302,14 +302,22 @@ PanelWindow {
                     Keys.onEnterPressed: root.run()
                     Keys.onDownPressed: root.index = Math.max(0, Math.min(root.index + 1, root.count - 1))
                     Keys.onUpPressed:   root.index = Math.max(root.index - 1, 0)
-                    // Tab never reaches Keys.onTabPressed here: Qt's focus
-                    // navigation claims it inside a TextInput first, so it has
-                    // to be taken explicitly and marked handled.
+                    // Tab and the arrows never reach Keys.onTabPressed /
+                    // Keys.onLeftPressed here: inside a TextInput, Qt's focus
+                    // navigation claims Tab and the caret claims left/right
+                    // before either handler runs, so both are taken here and
+                    // marked handled.
+                    //
+                    // Left/right therefore move between tabs rather than the
+                    // caret; Home/End and the mouse still place the caret.
                     Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Tab) {
-                            root.setTab(root.tab + 1); event.accepted = true
-                        } else if (event.key === Qt.Key_Backtab) {
-                            root.setTab(root.tab - 1); event.accepted = true
+                        switch (event.key) {
+                        case Qt.Key_Tab:
+                        case Qt.Key_Right:
+                            root.setTab(root.tab + 1); event.accepted = true; break
+                        case Qt.Key_Backtab:
+                        case Qt.Key_Left:
+                            root.setTab(root.tab - 1); event.accepted = true; break
                         }
                     }
                 }
@@ -350,10 +358,10 @@ PanelWindow {
                             width: (tabStrip.width - Theme.gap * (root.tabs.length - 1)) / root.tabs.length
                             height: tabStrip.height
                             radius: Theme.radiusSmall
-                            color: index === root.tab ? Theme.surface1
+                            color: index === root.tab ? Theme.selection
                                  : tabHover.hovered ? Theme.surface0 : "transparent"
                             border.width: Theme.borderWidth
-                            border.color: index === root.tab ? Theme.border : "transparent"
+                            border.color: index === root.tab ? Theme.selectionBorder : "transparent"
 
                             Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
@@ -455,7 +463,7 @@ PanelWindow {
                             width: list.width
                             height: 52
                             radius: Theme.radiusSmall
-                            color: index === root.index ? Theme.surface1
+                            color: index === root.index ? Theme.selection
                                  : hover.hovered ? Theme.surface0 : "transparent"
 
                             Behavior on color { ColorAnimation { duration: Theme.animFast } }
