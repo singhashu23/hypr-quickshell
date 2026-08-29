@@ -3,6 +3,7 @@
 import Quickshell
 import qs.modules.bar
 import qs.modules.launcher
+import qs.modules.lock
 import qs.modules.notifications
 
 ShellRoot {
@@ -18,4 +19,8 @@ ShellRoot {
 
     // org.freedesktop.Notifications daemon + toast stack
     Notifications {}
+
+    // ext-session-lock screen lock, engaged over IPC:
+    //   qs -c hyprland ipc call lock lock
+    Lock {}
 }

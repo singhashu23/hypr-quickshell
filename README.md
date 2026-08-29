@@ -94,6 +94,42 @@ The card is a fixed size — set by the wallpaper tile, identical on all three
 tabs — so a long list scrolls inside it rather than resizing the launcher under
 the cursor.
 
+### Lockscreen
+
+`modules/lock/Lock.qml` is a session lock on the compositor's own
+`ext-session-lock` protocol, replacing swaylock. Blurred wallpaper, the clock,
+and a prompt that fills with dots; a wrong password reddens the border, shakes
+the field and clears it for another try.
+
+`SUPER+L` and the 5-minute idle timeout both go through `waylandLockscreen`,
+which prefers the Quickshell lock and **falls back to swaylock if the shell is
+not running** — a lock command that silently does nothing is a worse failure
+than an ugly lock screen.
+
+The protocol is deliberately unforgiving: once locked the session stays locked
+until this process unlocks it, and if the process dies the compositor keeps the
+screen blanked rather than letting anyone in. Two consequences shape the code:
+
+- **Every failure path ends somewhere you can still type.** PAM errors re-arm
+  the prompt instead of latching, and the field is disabled only while a check
+  is actually in flight.
+- **The password is one string, not one per screen.** The prompt is drawn on
+  every output, so a `TextInput` per surface would fight over ownership. Keys
+  are taken directly and rendered as dots instead.
+
+Authentication uses PAM through `/etc/pam.d/swaylock` (`auth include login` —
+the auth stack alone, which is what a locker needs, and already present).
+
+If you are ever locked out by a broken build, from a TTY or over SSH:
+
+```sh
+qs -c hyprland ipc call lock unlock
+```
+
+That escape hatch does not weaken the lock. It defends against someone at the
+keyboard, who cannot reach a shell to call it without unlocking first; anything
+already running as this user is inside the fence regardless.
+
 ### GTK theme
 
 `bin/gtk-pywal` builds **Orchis-Pywal-Dark** into `~/.themes` from the Orchis

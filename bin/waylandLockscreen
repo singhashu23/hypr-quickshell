@@ -1,9 +1,16 @@
-#!/bin/bash
+#!/bin/sh
+# Lock the session.
+#
+# Prefers the Quickshell lockscreen, and falls back to swaylock when the shell
+# is not running — a lock command that silently does nothing is a worse failure
+# than an ugly lock screen, so the fallback is not optional.
 
-swaylock -i $(find ~/Pictures/wall -type f -name "*.jpg" -o -name "*.png"|shuf -n 1) \
-  --effect-blur 7x5 \
-  --indicator \
-  --clock \
-  --fade-in 0.2
+if qs -c hyprland ipc call lock lock >/dev/null 2>&1; then
+    exit 0
+fi
 
-
+wall=$(cat "$HOME/.cache/wal/wal" 2>/dev/null)
+if [ -n "$wall" ] && [ -f "$wall" ]; then
+    exec swaylock -i "$wall"
+fi
+exec swaylock
