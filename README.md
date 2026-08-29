@@ -1,388 +1,180 @@
-# hyprland-waybar-setup
+# hypr-quickshell
 
-Snapshot of my Linux desktop configuration — Hyprland/Wayland configs, helper
-scripts, and wallpaper collections. Archived here as the starting point for a
-rebuild of the setup around [Quickshell](https://quickshell.org/).
+A Hyprland desktop built on [Quickshell](https://quickshell.org) — bar, launcher,
+notifications, lockscreen and power menu as one shell, with everything retinting
+from the wallpaper through [pywal](https://github.com/dylanaraps/pywal).
 
-## Layout
+Replaces waybar, rofi, dunst/swaync and swaylock with a single QML surface.
 
-```
-config/       ~/.config/<name>  — drop-in replacements
-  hypr/         Hyprland compositor + hyprpaper
-  waybar/       status bar (current)
-  quickshell/   the new Quickshell shell (see below)
-  ags/          older Astal/AGS bar attempt
-  rofi/ wofi/ fuzzel/    launchers
-  dunst/ swaync/         notification daemons
-  kitty/ ghostty/ foot/  terminals
-  wlogout/      logout menu
-bin/          ~/.local/bin — helper scripts (see below)
-config/wal/   pywal templates
-wallpapers/   wall, wall_1, wall_3, wall_4
-```
+> ### ⚠️ This code is AI-generated
+>
+> Effectively all of the Quickshell code, the theming scripts and this README
+> were written by **Claude (Anthropic)** in a pair-programming session, driven
+> by my prompts and reviewed by me on a running machine.
+>
+> It works on my setup and every feature here was verified on screen, but it
+> has not been reviewed line by line by a human, and it has not been tested on
+> any hardware but mine. Read it before you run it — especially
+> `modules/lock/Lock.qml`, which is a session lock, and `bin/gtk-pywal`, which
+> rewrites files under `~/.config` and `~/.themes`.
 
-## Quickshell
+---
 
-A fresh shell targeting **Hyprland**, replacing waybar + rofi + dunst.
-Built against Quickshell 0.3.1 / Hyprland 0.56.2.
+## Screenshots
 
-Two shells live side by side as *named* configs. Neither is the default, so
-neither can shadow the other:
+**Bar** — workspaces · media and window title · tray, backlight, audio, network, battery, clock
 
-```
-config/quickshell/
-  hyprland/   the new island shell   ->  qs -c hyprland
-  niri/       the previous shell     ->  qs -c niri
-```
+![bar](screenshots/bar.png)
 
-There must be no `shell.qml` directly under `config/quickshell/` — Quickshell
-would register it as the 'default' config and stop scanning subdirectories
-entirely.
+**Launcher** — apps, open windows and a calculator in one island, with the current wallpaper beside them
 
-```
-config/quickshell/hyprland/
-  shell.qml              one Bar per screen + one Launcher
-  Theme.qml              design tokens: colour, metrics, type, motion
-  services/
-    Pywal.qml            live ~/.cache/wal/colors.json
-    Gtk.qml              the desktop's GTK theme, icon theme and font
-    Apps.qml             desktop-entry index + ranked search
-    Compositor.qml       workspaces, over Hyprland or niri
-  scripts/apps.py        .desktop scanner; resolves icons via the GTK theme
-  modules/bar/
-    Bar.qml              transparent panel holding three islands
-    Island.qml           the rounded slab itself
-    Pill.qml             an item inside an island (hover, click, scroll)
-    IconLabel.qml        icon + text pair
-    Workspaces.qml       click to switch
-    ActiveWindow.qml     focused window title (ToplevelManager)
-    MediaPlayer.qml      MPRIS — click to play/pause
-    Tray.qml             StatusNotifierItem tray
-    Backlight.qml        brightnessctl, scroll to adjust
-    Audio.qml            Pipewire — click to mute, scroll for volume
-    Network.qml          nmcli — SSID and signal
-    Battery.qml          UPower
-    Clock.qml            click to toggle seconds
-  modules/launcher/
-    Launcher.qml         wallpaper tile + three tabs: apps, open windows, calculator
-  modules/notifications/
-    Notifications.qml    org.freedesktop.Notifications daemon + toast stack
-    NotificationCard.qml a single toast, shaped like every other island
-```
+![launcher](screenshots/launcher-apps.png)
+![launcher windows tab](screenshots/launcher-windows.png)
 
-### Launcher
+**Power menu** and **lockscreen**
 
-One island, three tabs — the same three the niri launcher carries:
+![power menu](screenshots/powermenu.png)
+![lockscreen](screenshots/lockscreen.png)
 
-| tab | what it lists | activating a row |
-|---|---|---|
-| **Apps** | desktop entries, ranked so a prefix beats a mid-string hit | launches it |
-| **Windows** | what is already open, with each window's own icon | focuses it |
-| **Calculator** | a keypad over the search field | folds the result back into the expression |
+---
 
-`Tab` / `Shift+Tab` or `←` / `→` move between tabs; `Up`/`Down` move within a
-list; `Enter` activates. Left and right therefore do not move the text caret —
-`Home`/`End` and the mouse still do. Each tab can also be opened directly over
-IPC, for a keybind of its own:
+## What's in it
 
-```sh
-qs -c hyprland ipc call launcher windows
-qs -c hyprland ipc call launcher calculator
-```
-
-The card is a fixed size — set by the wallpaper tile, identical on all three
-tabs — so a long list scrolls inside it rather than resizing the launcher under
-the cursor.
-
-### Lockscreen
-
-`modules/lock/Lock.qml` is a session lock on the compositor's own
-`ext-session-lock` protocol, replacing swaylock. Blurred wallpaper, the clock,
-and a prompt that fills with dots; a wrong password reddens the border, shakes
-the field and clears it for another try.
-
-`SUPER+L` and the 5-minute idle timeout both go through `waylandLockscreen`,
-which prefers the Quickshell lock and **falls back to swaylock if the shell is
-not running** — a lock command that silently does nothing is a worse failure
-than an ugly lock screen.
-
-The protocol is deliberately unforgiving: once locked the session stays locked
-until this process unlocks it, and if the process dies the compositor keeps the
-screen blanked rather than letting anyone in. Two consequences shape the code:
-
-- **Every failure path ends somewhere you can still type.** PAM errors re-arm
-  the prompt instead of latching, and the field is disabled only while a check
-  is actually in flight.
-- **The password is one string, not one per screen.** The prompt is drawn on
-  every output, so a `TextInput` per surface would fight over ownership. Keys
-  are taken directly and rendered as dots instead.
-
-Authentication uses PAM through `/etc/pam.d/swaylock` (`auth include login` —
-the auth stack alone, which is what a locker needs, and already present).
-
-If you are ever locked out by a broken build, from a TTY or over SSH:
-
-```sh
-qs -c hyprland ipc call lock unlock
-```
-
-That escape hatch does not weaken the lock. It defends against someone at the
-keyboard, who cannot reach a shell to call it without unlocking first; anything
-already running as this user is inside the fence regardless.
-
-### GTK theme
-
-`bin/gtk-pywal` builds **Orchis-Pywal-Dark** into `~/.themes` from the Orchis
-theme already installed, recoloured from `~/.cache/wal/colors.json`. `randWall`
-runs it, so GTK, libadwaita and Qt apps retint with the wallpaper the same way
-the shell does.
-
-It builds from a **coloured** variant (`Orchis-Red-Dark-Dracula`), never a grey
-one. Orchis's variants are the same stylesheet with one colour swapped, and the
-grey ones paint dark text on their light accent
-(`theme_selected_fg_color: rgba(0,0,0,0.87)`) — an assumption that breaks the
-moment the accent is saturated. `--base` and `--ref` retarget it at any theme
-with sibling variants; it was built against Jasper first and moved to Orchis
-without changing the method.
-
-Which colours are accent colours is **derived from the theme, not guessed**: a
-line that differs between two sibling variants is by construction a line the
-accent is on. That distinction is load-bearing, because Orchis paints its
-accent and its `error_color` with the same `#ff5555` — as Jasper does with
-`#F44336` — and only position tells them apart. A hex substitution recolours
-destructive buttons along with the accent, and still misses the accent's
-`rgba()` forms in shadows and focus rings.
-
-| | follows pywal | why |
-|---|---|---|
-| accent | colour 4 — the slot `Theme.qml` uses | desktop and shell share one accent |
-| neutrals | the base theme's own lightness ladder, pywal's hue | keeps the theme's structure |
-| ground | **pitch black**, ladder re-anchored on it | `--ground` to change |
-| text | no, stays near-white | pywal's `fg` is whatever the wallpaper is; body text in it is unreadable |
-| error / warning / success | no | they must keep reading as signals — same call as `pywalStatusColors` |
-
-Two things are read from the base theme rather than assumed, because they
-differ between themes and getting them wrong is silent:
-
-- **the ladder's anchor** — Jasper's background is `#212121`, Orchis's is
-  `#1c1e26`; anchoring one theme's ladder on the other's shifts every surface.
-- **what counts as a neutral** — not "R=G=B". Jasper's greys are literally
-  equal-channel, but Orchis-Dracula's are blue-tinted (`#1c1e26` is 28/30/38),
-  and an equal-channel test passes its entire ramp through unrecoloured. Low
-  saturation is the property that actually separates a surface from a signal.
-
-Selection text is chosen by comparing contrast ratios, not a luminance
-threshold: a mid blue-grey accent sits under any sensible cut-off and still
-carries black far better than white.
-
-Reaching every app takes four separate mechanisms, which is why desktops
-usually end up half-themed:
-
-| surface | how |
+| | |
 |---|---|
-| GTK3 / GTK4 | the theme in `~/.themes` + `settings.ini` + gsettings |
-| **libadwaita** | reads no theme at all, only its own colour names. Orchis states them itself, so they are recoloured in place; for a theme that does not, they are written into `~/.config/gtk-4.0/gtk.css` |
-| Qt | a generated qt6ct palette at `~/.config/qt6ct/colors/pywal.conf` |
-| Flatpak | sandboxed away from `~/.themes` until `flatpak override` grants it |
+| **Bar** | Island layout, one per monitor. Workspaces, MPRIS media, focused window, system tray, backlight, audio, network, battery, clock. |
+| **Launcher** | Three tabs — applications, open windows, calculator — over a fixed-size card showing the current wallpaper. `SUPER+space`. |
+| **Notifications** | A real `org.freedesktop.Notifications` daemon and toast stack. Critical notifications never auto-expire. |
+| **Lockscreen** | `ext-session-lock` with PAM authentication. Blurred wallpaper, clock, dots. `SUPER+L`. |
+| **Power menu** | Lock, log out, suspend, restart, shut down. `SUPER+Q`. |
+| **GTK/Qt theme** | `bin/gtk-pywal` generates a pywal-coloured GTK theme and a Qt palette, and reaches libadwaita and Flatpak too. |
 
-```sh
-gtk-pywal                 # rebuild and apply
-gtk-pywal --no-apply      # build only, touch no config
-gtk-pywal --accent 5      # a different pywal slot
-gtk-pywal --ground '#0a0a0a'
-gtk-pywal --base Jasper-Red-Dark --ref Jasper-Grey-Dark --name Jasper-Pywal-Dark
-```
+Everything follows the wallpaper: change it and the shell, the GTK theme, the Qt
+palette and the lockscreen all retint without a restart.
 
-### Notifications
-
-A full D-Bus notification daemon, so `swaync` is not needed. Toasts stack under
-the bar on one screen — duplicating a toast across monitors is noise, not
-redundancy.
-
-- **Critical notifications never auto-expire.** Silently expiring the one that
-  mattered is the failure mode worth designing against; everything else gets
-  4s (low) or 6s (normal), or whatever the sender asks for.
-- **Hovering pauses the countdown**, so reading never races the timer. A hairline
-  along the bottom edge shows the remaining time.
-- **Actions are rendered as buttons.** The previous daemon advertised
-  `actionsSupported` but never drew them, so every actionable notification was a
-  dead end.
-- Notification images (album art, avatars) take precedence over the app icon;
-  a missing icon falls back to a glyph.
-- Click a toast to dismiss; click an action to invoke it and dismiss.
-
-Requires `QT_QPA_PLATFORMTHEME` to be set — see below.
-
-### Qt icon theme
-
-`hyprland.conf` sets `env = QT_QPA_PLATFORMTHEME,qt6ct`. Without it Qt loads no
-icon theme at all, and every `image://icon/…` lookup returns a magenta
-placeholder *with `status === Ready`* — so it cannot even be detected and
-handled in QML. That affects tray icons and notification icons alike.
-
-Note the icon theme is configured in three places that currently disagree:
-`~/.config/gtk-3.0/settings.ini` (`Flattery` — a typo, no such theme),
-`gsettings` (`Flatery`), and `~/.config/qt6ct/qt6ct.conf`
-(`Tela-circle-dracula`). The launcher sidesteps this by resolving icons itself
-through `gsettings`.
-
-### Design language
-
-Follows [ryoku](https://github.com/neur0map/ryoku-arch): paper and ink — warm
-bone type on pure black — with the frame retinting live from the wallpaper, and
-one motion language across every surface.
-
-That splits cleanly in `Theme.qml`. The **ground** is fixed near-black and the
-**type** is a fixed warm bone, because those two carry legibility. pywal drives
-the **accents, borders and highlights**, which is where wallpaper colour
-actually belongs. Set `inkAndPaper: false` to tint the ground from the wallpaper
-too.
-
-Surfaces are **islands**: discrete rounded slabs with real gaps between them,
-sharing one corner radius, one hairline border, and one set of durations. The
-bar is three islands (workspaces / window / status); the launcher is a fourth.
-
-### Launcher
-
-`SUPER + space`. Empty, it shows the time and date. Typing filters applications;
-an arithmetic expression is evaluated inline above the results.
-
-- `↑` `↓` `Tab` move, `Enter` launches, `Esc` closes, click-away closes
-- Ranked matching: exact > name prefix > name substring > keywords > comment > exec
-- Icons resolved against the **live GTK icon theme**, not Qt's
-
-Driven over IPC, so it can be bound from anywhere:
-
-```sh
-qs -c hyprland ipc call launcher toggle
-qs -c hyprland ipc call launcher open
-```
-
-### Compositor support
-
-`services/Compositor.qml` presents one workspace interface over two back ends.
-Hyprland is the target; niri is supported because this setup is often driven
-from a niri session, and a workspace widget you can only check after logging out
-is a workspace widget you cannot check. Hyprland uses the `Quickshell.Hyprland`
-module, niri its JSON event stream.
-
-### GTK
-
-`services/Gtk.qml` reads the desktop's theme, icon theme and font from
-`gsettings`, so the shell matches the rest of the session:
-
-- launcher prose uses the GTK font (`Cantarell`); the bar keeps a Nerd Font
-  because the glyph icons live in it
-- `scripts/apps.py` resolves every app icon through the GTK icon theme and its
-  `Inherits` chain, falling back to `hicolor` and `/usr/share/pixmaps`
-
-Qt only picks up the GTK icon theme when `QT_QPA_PLATFORMTHEME` is configured,
-and it usually is not — hence resolving icons to absolute paths here rather than
-handing names to Qt.
-
-Run it:
-
-```sh
-qs -c hyprland        # foreground, logs to stdout
-qs -c hyprland -d     # daemonized
-qs -c niri            # the previous shell, unchanged
-```
-
-To start it with the session, in `hyprland.conf`:
+## Requirements
 
 ```
-exec-once = qs -c hyprland
+hyprland  quickshell  python-pywal  qt6ct  imagemagick
+brightnessctl  networkmanager  wireplumber  swayidle  awww (or swww)
 ```
 
-Notes:
-- Modules degrade instead of erroring: `Workspaces` is empty off Hyprland,
-  `Battery` hides without one, `MediaPlayer` and `Tray` hide when empty.
-- `Theme.qml` is the single place to retheme.
+A Nerd Font is required for the bar glyphs — this uses **JetBrainsMono Nerd Font**.
 
-## pywal
-
-The whole desktop follows the wallpaper's palette.
-
-`randWall` picks a wallpaper, sets it with `awww`, and runs `wal`, which
-regenerates `~/.cache/wal/`. From there two consumers pick it up:
-
-**Quickshell** — `services/Pywal.qml` reads `~/.cache/wal/colors.json` through a
-`FileView` with `watchChanges: true`, so the bar retints the instant pywal
-rewrites the file. No restart, no signal, no reload command.
-
-**Hyprland** — `config/wal/templates/colors-hyprland.conf` makes pywal emit
-`~/.cache/wal/colors-hyprland.conf` in Hyprland syntax (`$color0` … `$color15`).
-`hyprland.conf` sources it and uses `$color4`/`$color6` for the active border.
-Hyprland can't watch the file, so `randWall` calls `hyprctl reload`.
-
-Install the template (pywal only reads templates from `~/.config/wal/templates`):
-
-```sh
-mkdir -p ~/.config/wal/templates
-cp config/wal/templates/colors-hyprland.conf ~/.config/wal/templates/
-```
-
-Theming controls in `Theme.qml`:
-
-| property | default | effect |
-| --- | --- | --- |
-| `usePywal` | `true` | derive backgrounds, text and accents from the wallpaper; `false` pins the built-in Catppuccin Mocha |
-| `pywalStatusColors` | `false` | also tint low-battery / offline red, charging green, etc. Off by default — pywal palettes are often near-monochrome, and a warning tinted to match the wallpaper stops reading as a warning |
-
-If `~/.cache/wal/colors.json` is missing, the shell falls back to Catppuccin
-rather than failing.
+PAM authentication for the lockscreen goes through `/etc/pam.d/swaylock`, which
+the `swaylock` package provides. If you do not have it, add a `/etc/pam.d/`
+entry containing `auth include login` and point `config` at it in
+`modules/lock/Lock.qml`.
 
 ## Install
 
 ```sh
-git clone <this-repo> ~/hyprland-waybar-setup
-cd ~/hyprland-waybar-setup
+git clone https://github.com/singhashu23/hypr-quickshell.git
+cd hypr-quickshell
 
-# configs (quickshell included — it carries both named configs)
-for d in config/*/; do ln -sfn "$PWD/$d" ~/.config/"$(basename "$d")"; done
+# configs — quickshell carries both the hyprland and niri shells
+ln -s "$PWD/config/hypr"       ~/.config/hypr
+ln -s "$PWD/config/quickshell" ~/.config/quickshell
 
 # scripts
-mkdir -p ~/.local/bin
-cp bin/* ~/.local/bin/ && chmod +x ~/.local/bin/*
+cp bin/* ~/.local/bin/
 
-# wallpapers (scripts expect ~/Pictures/wall)
-mkdir -p ~/Pictures
-cp -r wallpapers/* ~/Pictures/
+# wallpapers are expected in ~/Pictures/wall
+mkdir -p ~/Pictures/wall && cp wallpapers/wall/* ~/Pictures/wall/
+
+# first palette, then the GTK theme
+wal -i ~/Pictures/wall/<some-image>
+gtk-pywal
 ```
 
-## Scripts in `bin/`
+Then run `qs -c hyprland`. `hyprland.conf` already starts it.
 
-| Script | Purpose |
-| --- | --- |
-| `randWall`, `initRandomWallpaper` | pick a random wallpaper from `~/Pictures/wall`, apply via `swww`, regenerate pywal colors, restart waybar |
-| `changeWallpaper`, `randomWallpaper`, `randomNatureWallpaper` | X11-era variants using `xwallpaper` |
-| `niriChangeWall`, `niriWallpaperinit` | niri-session wallpaper handling |
-| `wallAddress` | print the wallpaper currently loaded by `swaybg` |
-| `powermenu`, `power-menu.sh`, `bsppowermenu` | rofi power menus |
-| `network_menu`, `wifi` | NetworkManager picker via rofi / `nmcli` |
-| `volume`, `music`, `battery`, `clock`, `nettraf` | status-bar data sources |
-| `screenshot`, `rofiimg` | capture + image picker |
-| `idleLock`, `lock.sh`, `waylandLockscreen` | idle and lock handling |
-| `alacrittyColors.sh`, `wal` | pywal → terminal color plumbing |
-| `bspthemes`, `autostart_bspwm.sh`, `.xinitrc` | leftovers from the bspwm setup |
+## Keys
 
-Binaries that lived alongside these (`eww`, `st`, `goose`, `kiro-cli*`) are
-deliberately excluded — they are build outputs, not configuration.
+| | |
+|---|---|
+| `SUPER+space` | launcher |
+| `SUPER+W` | launcher, open-windows tab |
+| `SUPER+Q` | power menu |
+| `SUPER+L` | lock |
+| `SUPER+N` | network (`nmtui`) |
+| `CTRL+ALT+T` | random wallpaper, retinting everything |
 
-## Known rough edges
+Inside the launcher: `Tab`/`Shift+Tab` or `←`/`→` switch tabs, `↑`/`↓` move,
+`Enter` activates.
 
-- `config/hypr/hyprpaper.conf` still points at `/home/ashu/Pictures/1.jpg` — a
-  stale username from an older install. It is unused (wallpapers go through
-  `awww`), so it can probably just be deleted.
-- `monitor=DP-4` in `hyprland.conf` does not match this machine's outputs,
-  which are `DP-1` and `eDP-1`.
-- `config/hypr/` carries four generations of config (`hyprland.conf` plus
-  `hyprland1/2/3.conf`); only `hyprland.conf` is live.
-- `randWall` called `alacrittyColosrs.sh`, which does not exist (the script is
-  `alacrittyColors.sh`) — fixed.
-- The machine is presently running **niri**, not Hyprland.
+Each surface is also reachable over IPC, which is what the keybinds actually call:
 
-## Next
+```sh
+qs -c hyprland ipc call launcher toggle
+qs -c hyprland ipc call launcher windows
+qs -c hyprland ipc call powermenu toggle
+qs -c hyprland ipc call lock lock
+qs -c hyprland ipc call lock unlock     # recovery, if a build ever locks you out
+```
 
-Still to build in Quickshell: dashboard, control sidebar, power menu, and a
-lock screen.
+## Layout
+
+```
+config/quickshell/hyprland/
+  shell.qml              the surfaces this shell puts on screen
+  Theme.qml              every colour and metric, in one place
+  services/
+    Pywal.qml            watches ~/.cache/wal/colors.json, retints live
+    Apps.qml             desktop-entry index and icon resolution
+    Compositor.qml       workspaces and windows, over Hyprland and niri alike
+    Gtk.qml              mirrors the desktop's GTK settings
+  modules/
+    bar/ launcher/ lock/ notifications/ powermenu/
+  scripts/apps.py        parses .desktop files against the live icon theme
+bin/                     wallpaper, theming and session scripts
+config/hypr/             Hyprland config
+```
+
+## Notes on how a few things work
+
+A handful of these were not obvious, and the reasoning is worth keeping:
+
+**The theme generator does not substitute colours by hex.** Jasper and Orchis
+both paint their accent and their `error_color` with the *same* value
+(`#F44336`, `#ff5555`), so a hex substitution recolours destructive buttons
+along with the accent. Instead, two sibling variants of the same theme are
+diffed: a line that differs between them is by construction a line the accent
+is on. Destructive actions stay red.
+
+**A "neutral" is low saturation, not `R=G=B`.** Jasper's greys are literally
+equal-channel; Orchis-Dracula's are blue-tinted (`#1c1e26` is 28/30/38). Testing
+for equal channels silently passes an entire neutral ramp through unrecoloured.
+
+**libadwaita reads no theme at all.** `gtk-theme-name` does nothing to it. Its
+only hook is `~/.config/gtk-4.0/gtk.css`, under its own colour names — which is
+why most setups end up with a themed GTK3 and an Adwaita-blue GTK4.
+
+**Selection contrast is measured, not thresholded.** A luminance cut-off picked
+white on a `#88A9B0` accent at 2.52:1; comparing both ratios picks black at
+8.35:1.
+
+**Islands are lifted by a target lightness, not a ratio.** Mixing toward the
+wallpaper collapses to black whenever the palette is itself dark, and the tint
+is scaled separately, because at 4% lightness the palette's own saturation
+reads as flat black.
+
+**The launcher card sits on whole pixels.** A card at a fractional `y` is
+resampled with a sub-pixel offset that softens every pixel in it — that, not
+decode size, is what makes a wallpaper thumbnail look blurry.
+
+## Credits
+
+- [Quickshell](https://quickshell.org) — the shell toolkit all of this is built on
+- [ryoku-arch](https://github.com/neur0map/ryoku-arch) — the design language: paper and ink, warm bone type on near-black, the frame retinting from the wallpaper
+- [Orchis](https://github.com/vinceliuice/Orchis-theme) and [Jasper](https://github.com/vinceliuice/Jasper-gtk-theme) by vinceliuice — the GTK themes recoloured here
+- [Flatery](https://github.com/cbrnix/Flatery) — icon theme
+- [pywal](https://github.com/dylanaraps/pywal) — palette generation
+
+Wallpapers under `wallpapers/` are collected from [wallhaven](https://wallhaven.cc)
+and are the property of their respective artists. They are included for
+convenience only and are not covered by this repository's license.
+
+## License
+
+MIT, for the configuration and code in this repository. See [LICENSE](LICENSE).

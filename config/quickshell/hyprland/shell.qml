@@ -4,6 +4,7 @@ import Quickshell
 import qs.modules.bar
 import qs.modules.launcher
 import qs.modules.lock
+import qs.modules.powermenu
 import qs.modules.notifications
 
 ShellRoot {
@@ -23,4 +24,8 @@ ShellRoot {
     // ext-session-lock screen lock, engaged over IPC:
     //   qs -c hyprland ipc call lock lock
     Lock {}
+
+    // session actions, replacing the rofi powermenu:
+    //   qs -c hyprland ipc call powermenu toggle
+    PowerMenu {}
 }
