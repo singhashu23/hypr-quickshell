@@ -175,6 +175,10 @@ def main():
                 icon_path = icons.get(icon_val, "")
 
             apps[fn] = {
+                # what a compositor reports as a window's app_id / class, so the
+                # launcher can put an icon next to an open window
+                "id": fn[:-len(".desktop")],
+                "wmclass": e.get("StartupWMClass", ""),
                 "name": e.get("Name", fn),
                 "comment": e.get("Comment", ""),
                 "categories": e.get("Categories", ""),

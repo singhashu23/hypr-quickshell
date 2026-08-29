@@ -84,5 +84,67 @@ Singleton {
         }
     }
 
+    // ---------------- open windows ----------------
+    // Shape: { id, title, appId, workspace }. `id` is whatever the compositor
+    // wants back in order to focus it — an address on Hyprland, a numeric id on
+    // niri — so callers never need to know which one they are on.
+    //
+    // Queried on demand rather than mirrored: the list is only ever read while
+    // the launcher is open, and it goes stale the moment it is used.
+    property var windows: []
+
+    function refreshWindows() {
+        if (onHyprland) hyprWindows.running = true
+        else niriWindows.running = true
+    }
+
+    function focusWindow(w) {
+        if (!w) return
+        if (onHyprland) Hyprland.dispatch("focuswindow address:" + w.id)
+        else Quickshell.execDetached(["niri", "msg", "action", "focus-window", String(w.id)])
+    }
+
+    Process {
+        id: hyprWindows
+        command: ["hyprctl", "-j", "clients"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.windows = JSON.parse(text)
+                        .filter(c => c.mapped && c.title)
+                        .map(c => ({
+                            id: c.address,
+                            title: c.title,
+                            appId: c.class ? c.class : "",
+                            workspace: c.workspace && c.workspace.name ? c.workspace.name : ""
+                        }))
+                } catch (e) {
+                    console.warn("Compositor: bad hyprctl clients payload — " + e)
+                    root.windows = []
+                }
+            }
+        }
+    }
+
+    Process {
+        id: niriWindows
+        command: ["niri", "msg", "--json", "windows"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.windows = JSON.parse(text).map(w => ({
+                        id: w.id,
+                        title: w.title ? w.title : "",
+                        appId: w.app_id ? w.app_id : "",
+                        workspace: w.workspace_id ? String(w.workspace_id) : ""
+                    }))
+                } catch (e) {
+                    console.warn("Compositor: bad niri window payload — " + e)
+                    root.windows = []
+                }
+            }
+        }
+    }
+
     Component.onCompleted: if (onHyprland) syncHyprland()
 }

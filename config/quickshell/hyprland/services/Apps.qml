@@ -41,6 +41,27 @@ Singleton {
         return scored.map(s => s.app)
     }
 
+    // Match a compositor's window app_id / class back to a desktop entry, so an
+    // open window can be shown with its own icon. Exact ids first: a loose
+    // match is useful (chromium reports "chromium", brave "brave-browser") but
+    // wrong often enough that it must not outrank one.
+    function iconFor(appId) {
+        if (!appId) return ""
+        const q = String(appId).toLowerCase()
+
+        for (const a of apps)
+            if ((a.wmclass || "").toLowerCase() === q || (a.id || "").toLowerCase() === q)
+                return a.icon
+
+        if (q.length < 3) return ""
+        for (const a of apps) {
+            const id = (a.id || "").toLowerCase()
+            if (id.length >= 3 && (id.indexOf(q) !== -1 || q.indexOf(id) !== -1))
+                return a.icon
+        }
+        return ""
+    }
+
     function launch(app) {
         if (!app) return
         if (app.terminal) Quickshell.execDetached(["sh", "-c", "kitty -e " + app.exec])

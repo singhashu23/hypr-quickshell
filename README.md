@@ -64,11 +64,34 @@ config/quickshell/hyprland/
     Battery.qml          UPower
     Clock.qml            click to toggle seconds
   modules/launcher/
-    Launcher.qml         wallpaper pane; clock at rest; apps + calculator on search
+    Launcher.qml         wallpaper tile + three tabs: apps, open windows, calculator
   modules/notifications/
     Notifications.qml    org.freedesktop.Notifications daemon + toast stack
     NotificationCard.qml a single toast, shaped like every other island
 ```
+
+### Launcher
+
+One island, three tabs — the same three the niri launcher carries:
+
+| tab | what it lists | activating a row |
+|---|---|---|
+| **Apps** | desktop entries, ranked so a prefix beats a mid-string hit | launches it |
+| **Windows** | what is already open, with each window's own icon | focuses it |
+| **Calculator** | a keypad over the search field | folds the result back into the expression |
+
+`Tab` / `Shift+Tab` cycle the tabs; `Up`/`Down` move within a list; `Enter`
+activates. Each tab can also be opened directly over IPC, for a keybind of its
+own:
+
+```sh
+qs -c hyprland ipc call launcher windows
+qs -c hyprland ipc call launcher calculator
+```
+
+The card is a fixed size — set by the wallpaper tile, identical on all three
+tabs — so a long list scrolls inside it rather than resizing the launcher under
+the cursor.
 
 ### Notifications
 
