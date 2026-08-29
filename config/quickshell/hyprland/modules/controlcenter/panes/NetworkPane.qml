@@ -10,9 +10,33 @@ Column {
 
     property bool wifiOn: false
     property var nets: []
+    property var saved: []
     property string detail: ""
     property string err: ""
     property bool scanning: false
+
+    // the network currently asking for a password, and what has been typed
+    property string authSsid: ""
+    property string busySsid: ""
+
+    function isSaved(ssid) { return saved.indexOf(ssid) !== -1 }
+    function isOpen(sec) { return sec === "open" || sec === "" || sec === "--" }
+
+    function connect(ssid, pass) {
+        root.err = ""
+        root.busySsid = ssid
+        conn.command = pass && pass !== ""
+                     ? ["nmcli", "device", "wifi", "connect", ssid, "password", pass]
+                     : ["nmcli", "device", "wifi", "connect", ssid]
+        conn.running = true
+    }
+
+    function disconnect(ssid) {
+        root.err = ""
+        root.busySsid = ssid
+        conn.command = ["nmcli", "connection", "down", "id", ssid]
+        conn.running = true
+    }
 
     Process {
         id: state
@@ -24,14 +48,15 @@ Column {
     Process {
         id: scan
         running: true
-        // IN-USE:SSID:SIGNAL:SECURITY, strongest first, one row per SSID
         command: ["sh", "-c",
             "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY device wifi list 2>/dev/null " +
-            "| awk -F: 'length($2){ if(!seen[$2]++) print }' | head -24"]
+            "| awk -F: 'length($2){ if(!seen[$2]++) print }' | head -24; " +
+            "echo '---'; nmcli -t -f NAME connection show 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
+                const parts = text.split("---")
                 const out = []
-                for (const line of text.trim().split("\n")) {
+                for (const line of parts[0].trim().split("\n")) {
                     if (!line) continue
                     const p = line.split(":")
                     out.push({
@@ -42,6 +67,8 @@ Column {
                     })
                 }
                 root.nets = out
+                root.saved = parts.length > 1
+                           ? parts[1].trim().split("\n").filter(l => l) : []
                 root.scanning = false
             }
         }
@@ -57,9 +84,14 @@ Column {
     }
 
     Process {
-        id: connect
-        stdout: StdioCollector { onStreamFinished: { refresh.restart() } }
-        stderr: StdioCollector { onStreamFinished: if (text.trim() !== "") root.err = text.trim() }
+        id: conn
+        onExited: { root.busySsid = ""; refresh.restart() }
+        stderr: StdioCollector {
+            onStreamFinished: if (text.trim() !== "") root.err = text.trim()
+        }
+        stdout: StdioCollector {
+            onStreamFinished: if (text.indexOf("successfully") !== -1) root.authSsid = ""
+        }
     }
     Process { id: radio; onExited: refresh.restart() }
 
@@ -100,19 +132,115 @@ Column {
 
         Repeater {
             model: root.nets
-            delegate: CcRow {
+
+            delegate: Column {
+                id: entry
                 required property var modelData
-                icon: modelData.signal > 75 ? "󰤨" : modelData.signal > 50 ? "󰤥"
-                    : modelData.signal > 25 ? "󰤢" : "󰤟"
-                title: modelData.ssid
-                subtitle: (modelData.active ? "Connected · " : "")
-                        + modelData.signal + "%  ·  " + modelData.security
-                selected: modelData.active
-                onActivated: {
-                    if (modelData.active) return
-                    root.err = ""
-                    connect.command = ["nmcli", "device", "wifi", "connect", modelData.ssid]
-                    connect.running = true
+                width: parent.width
+                spacing: 0
+
+                // referenced by id, not by walking parents: CcButton is
+                // reparented into the row's trailing item, so parent.parent
+                // from inside it is not this delegate
+                readonly property bool needsPass:
+                    !modelData.active && !root.isSaved(modelData.ssid)
+                    && !root.isOpen(modelData.security)
+
+                CcRow {
+                    icon: modelData.signal > 75 ? "󰤨" : modelData.signal > 50 ? "󰤥"
+                        : modelData.signal > 25 ? "󰤢" : "󰤟"
+                    title: modelData.ssid
+                    subtitle: (modelData.active ? "Connected · " : "")
+                            + modelData.signal + "%  ·  " + modelData.security
+                            + (!modelData.active && root.isSaved(modelData.ssid) ? "  ·  saved" : "")
+                    selected: modelData.active
+                    interactive: false
+
+                    CcButton {
+                        label: modelData.active ? "Disconnect"
+                             : entry.needsPass && root.authSsid !== modelData.ssid
+                               ? "Connect…" : "Connect"
+                        primary: !modelData.active
+                        busy: root.busySsid === modelData.ssid
+                        enabled: root.busySsid === ""
+                        onClicked: {
+                            if (modelData.active) { root.disconnect(modelData.ssid); return }
+                            if (entry.needsPass) {
+                                // ask here rather than failing at nmcli: a new
+                                // secured network cannot be joined without one
+                                root.authSsid = root.authSsid === modelData.ssid
+                                              ? "" : modelData.ssid
+                                root.err = ""
+                                return
+                            }
+                            root.connect(modelData.ssid, "")
+                        }
+                    }
+                }
+
+                // password prompt, shown only for the network being joined
+                Rectangle {
+                    width: parent.width
+                    height: root.authSsid === modelData.ssid ? 48 : 0
+                    visible: height > 0
+                    clip: true
+                    radius: Theme.radiusSmall
+                    color: Theme.surface1
+                    border.width: Theme.borderWidth
+                    border.color: Theme.selectionBorder
+
+                    Behavior on height { NumberAnimation { duration: Theme.animFast } }
+
+                    onVisibleChanged: if (visible) pass.forceActiveFocus()
+
+                    Text {
+                        id: lock
+                        anchors { left: parent.left; leftMargin: Theme.padding
+                                  verticalCenter: parent.verticalCenter }
+                        text: "󰌾"
+                        color: Theme.accent
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeLarge
+                    }
+
+                    TextInput {
+                        id: pass
+                        anchors { left: lock.right; leftMargin: Theme.gap
+                                  right: go.left; rightMargin: Theme.gap
+                                  verticalCenter: parent.verticalCenter }
+                        echoMode: TextInput.Password
+                        passwordCharacter: "•"
+                        color: Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fontSize
+                        selectByMouse: true
+                        selectionColor: Theme.alpha(Theme.accent, 0.35)
+                        clip: true
+
+                        Text {
+                            anchors.fill: parent
+                            visible: pass.text === ""
+                            text: "Password for " + modelData.ssid
+                            color: Theme.overlay
+                            font: pass.font
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Keys.onReturnPressed: { root.connect(modelData.ssid, pass.text); pass.text = "" }
+                        Keys.onEnterPressed:  { root.connect(modelData.ssid, pass.text); pass.text = "" }
+                        Keys.onEscapePressed: { root.authSsid = ""; pass.text = "" }
+                    }
+
+                    CcButton {
+                        id: go
+                        anchors { right: parent.right; rightMargin: Theme.padding
+                                  verticalCenter: parent.verticalCenter }
+                        label: "Join"
+                        primary: true
+                        busy: root.busySsid === modelData.ssid
+                        enabled: pass.text !== "" && root.busySsid === ""
+                        onClicked: { root.connect(modelData.ssid, pass.text); pass.text = "" }
+                    }
                 }
             }
         }
@@ -120,7 +248,7 @@ Column {
         Text {
             visible: root.err !== ""
             width: parent.width
-            text: root.err + "\nA network needing a new password is easier in `nmtui` (SUPER+N)."
+            text: root.err
             color: Theme.red
             wrapMode: Text.WordWrap
             font.family: Theme.uiFont

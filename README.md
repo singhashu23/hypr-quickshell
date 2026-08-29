@@ -51,7 +51,7 @@ Replaces waybar, rofi, dunst/swaync and swaylock with a single QML surface.
 | **Notifications** | A real `org.freedesktop.Notifications` daemon and toast stack. Critical notifications never auto-expire. |
 | **Lockscreen** | `ext-session-lock` with PAM authentication. Blurred wallpaper, clock, dots. `SUPER+L`. |
 | **Power menu** | Lock, log out, suspend, restart, shut down. `SUPER+Q`. |
-| **Control centre** | Sidebar of eight tabs — Home, Audio, Network, Bluetooth, Display, Power, System, Notifications. `SUPER+A`. |
+| **Control centre** | Sidebar of eight tabs — Home, Audio, Network, Bluetooth, Display, Power, System, Notifications. Wi-Fi scans, connects and prompts for a password when one is needed. `SUPER+A`. |
 | **GTK/Qt theme** | `bin/gtk-pywal` generates a pywal-coloured GTK theme and a Qt palette, and reaches libadwaita and Flatpak too. |
 
 Everything follows the wallpaper: change it and the shell, the GTK theme, the Qt
