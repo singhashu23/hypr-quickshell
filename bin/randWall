@@ -16,6 +16,10 @@ magick "$wall" -scale 50% -blur 4x2 -resize 100% ~/Pictures/rofi/current.blur 2>
 
 alacrittyColors.sh >/dev/null 2>&1 &
 
+# rebuild the GTK/Qt theme from the new palette (~2s), so GTK, libadwaita and
+# Qt apps retint with the wallpaper the same way the shell already does
+gtk-pywal --quiet >/dev/null 2>&1 &
+
 # Hyprland re-reads the sourced color file; Quickshell watches colors.json
 # itself and retints without being told.
 if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]; then

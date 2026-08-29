@@ -41,6 +41,15 @@ Singleton {
         return Qt.rgba(cc.r, cc.g, cc.b, a)
     }
 
+    // A colour moved to a target lightness, its hue kept.
+    function withLightness(c, l) {
+        const cc = Qt.darker(c, 1.0)
+        const cur = (Math.max(cc.r, cc.g, cc.b) + Math.min(cc.r, cc.g, cc.b)) / 2
+        if (cur <= 0.001) return Qt.rgba(l, l, l, 1)
+        return l > cur ? mix(cc, "white", (l - cur) / (1 - cur))
+                       : mix(cc, "black", (cur - l) / cur)
+    }
+
     // ---- ink & paper ----
     readonly property color ink:  "#000000"          // pure black ground
     readonly property color bone: "#e8e2d6"          // warm bone type
@@ -49,8 +58,17 @@ Singleton {
     readonly property color walFg: wal ? Pywal.foreground : "#cdd6f4"
 
     // ---- surfaces ----
+    // The ground is pitch black; an island has to read as a slab lifted off
+    // it. Lifting by a *ratio* toward the wallpaper fails whenever the palette
+    // is itself near-black — mix(ink, walBg, 0.35) lands on #060a0c for a dark
+    // wallpaper, which is black by any other name and takes the window-title
+    // island down with it. So the lift is a target lightness carrying the
+    // wallpaper's hue, and holds whatever the wallpaper does.
+    readonly property real islandLightness: 0.13
+
     readonly property color base:     inkAndPaper ? ink : walBg
-    readonly property color island:   inkAndPaper ? mix(ink, walBg, 0.35) : mix(walBg, "black", 0.25)
+    readonly property color island:   inkAndPaper ? withLightness(walBg, islandLightness)
+                                                  : mix(walBg, "black", 0.25)
     readonly property color surface0: mix(island, bone, 0.09)
     readonly property color surface1: mix(island, bone, 0.16)
     readonly property color surface2: mix(island, bone, 0.24)

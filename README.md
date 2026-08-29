@@ -94,6 +94,55 @@ The card is a fixed size — set by the wallpaper tile, identical on all three
 tabs — so a long list scrolls inside it rather than resizing the launcher under
 the cursor.
 
+### GTK theme
+
+`bin/gtk-pywal` builds **Jasper-Pywal-Dark** into `~/.themes` from the Jasper
+theme already installed, recoloured from `~/.cache/wal/colors.json`. `randWall`
+runs it, so GTK, libadwaita and Qt apps retint with the wallpaper the same way
+the shell does.
+
+It builds from the **Red** variant, not the Grey one in use. Jasper's variants
+are the same stylesheet with one colour swapped, and Grey paints dark text on
+its light accent (`theme_selected_fg_color: rgba(0,0,0,0.87)`) — an assumption
+that breaks the moment the accent is saturated. Red is the same theme already
+shaped for a coloured accent.
+
+Which colours are accent colours is **derived from the theme, not guessed**: a
+line that differs between two variants is by construction a line the accent is
+on. That distinction matters, because Red paints its accent and its
+`error_color` with the same `#F44336` and only position tells them apart — a
+hex substitution recolours destructive buttons along with the accent, and
+misses the accent's `rgba()` forms in shadows and focus rings.
+
+| | follows pywal | why |
+|---|---|---|
+| accent | colour 4 — the slot `Theme.qml` uses | desktop and shell share one accent |
+| neutrals | Jasper's own lightness ladder, pywal's hue | keeps the theme's structure |
+| ground | **pitch black**, ladder re-anchored on it | `--ground` to change |
+| text | no, stays near-white | pywal's `fg` is whatever the wallpaper is; body text in it is unreadable |
+| error / warning / success | no | they must keep reading as signals — same call as `pywalStatusColors` |
+
+Selection text is chosen by comparing contrast ratios rather than a luminance
+threshold: a mid blue-grey accent sits under any sensible cut-off and still
+carries black far better than white.
+
+Reaching every app takes four separate mechanisms, which is why desktops
+usually end up half-themed:
+
+| surface | how |
+|---|---|
+| GTK3 / GTK4 | the theme in `~/.themes` + `settings.ini` + gsettings |
+| **libadwaita** | reads no theme at all — only its own colour names, restated into `~/.config/gtk-4.0/gtk.css` |
+| Qt | a generated qt6ct palette at `~/.config/qt6ct/colors/pywal.conf` |
+| Flatpak | sandboxed away from `~/.themes` until `flatpak override` grants it |
+
+```sh
+gtk-pywal                 # rebuild and apply
+gtk-pywal --no-apply      # build only, touch no config
+gtk-pywal --accent 5      # a different pywal slot
+gtk-pywal --ground '#0a0a0a'
+```
+
 ### Notifications
 
 A full D-Bus notification daemon, so `swaync` is not needed. Toasts stack under

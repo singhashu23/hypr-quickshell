@@ -1,0 +1,601 @@
+#!/usr/bin/env python3
+"""Generate a pywal-coloured GTK theme from the Jasper theme already installed.
+
+The theme in use is Jasper-Grey-Dark. Grey and Red are byte-identical apart
+from the accent slot, so this builds from the *Red* variant: Grey paints dark
+text on its light accent (theme_selected_fg_color: rgba(0,0,0,0.87)), an
+assumption that breaks the moment the accent is saturated. Red is the same
+theme already shaped for a coloured accent, so swapping its accent for pywal's
+is the substitution that stays correct.
+
+What follows pywal, and what deliberately does not:
+
+  accent    -> pywal colour 4, the same slot the Quickshell shell uses, so the
+               desktop and the shell share one accent
+  neutrals  -> Jasper's own lightness ladder kept exactly, retinted to the hue
+               and saturation of pywal's background
+  text      -> left near-white. pywal's foreground is whatever the wallpaper
+               happens to be (pink, here); body text in it is not readable.
+               Same call Theme.qml already makes for the shell: pywal drives
+               accents, the ground and the type carry legibility.
+  status    -> error/warning/success untouched, for the same reason
+               pywalStatusColors is off in the shell: they must keep reading
+               as signals rather than as decoration.
+"""
+
+import argparse
+import colorsys
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+WAL = os.path.join(HOME, ".cache/wal/colors.json")
+THEME_DIRS = ["/usr/share/themes", os.path.join(HOME, ".themes")]
+
+# text files worth rewriting; everything else is copied through untouched
+TEXT_SUFFIXES = (".css", ".rc", ".gtkrc", ".svg", ".theme", "gtkrc")
+
+HEX_RE = re.compile(r"#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b")
+
+
+# ---------------------------------------------------------------- colour ---
+def to_rgb(h):
+    h = h.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def to_hex(rgb):
+    return "#" + "".join(f"{max(0, min(255, round(c * 255))):02x}" for c in rgb)
+
+
+def lightness(h):
+    r, g, b = to_rgb(h)
+    return colorsys.rgb_to_hls(r, g, b)[1]
+
+
+def relative_luminance(h):
+    def lin(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(c) for c in to_rgb(h))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a, b):
+    la, lb = relative_luminance(a), relative_luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def best_fg(bg, dark="#000000", light="#FFFFFF"):
+    """Whichever of black or white actually reads on this background.
+
+    A luminance threshold gets this wrong through the middle of the range: a
+    mid blue-grey accent sits under any sensible cut-off and still carries
+    black far better than white. Comparing the two ratios cannot.
+    """
+    return dark if contrast(dark, bg) >= contrast(light, bg) else light
+
+
+def is_grey(h):
+    r, g, b = to_rgb(h)
+    return abs(r - g) < 0.02 and abs(g - b) < 0.02
+
+
+def shift_lightness(base_hex, delta):
+    """base_hex moved by an absolute lightness delta, hue and saturation kept."""
+    r, g, b = to_rgb(base_hex)
+    hh, ll, ss = colorsys.rgb_to_hls(r, g, b)
+    return to_hex(colorsys.hls_to_rgb(hh, max(0.0, min(1.0, ll + delta)), ss))
+
+
+def retint(target_hex, hue_from, sat_scale=1.0):
+    """target's lightness, hue_from's hue and saturation."""
+    hh, _, ss = colorsys.rgb_to_hls(*to_rgb(hue_from))
+    ll = lightness(target_hex)
+    return to_hex(colorsys.hls_to_rgb(hh, ll, min(1.0, ss * sat_scale)))
+
+
+# ------------------------------------------------------------ discovery ---
+def find_theme(name):
+    for d in THEME_DIRS:
+        p = os.path.join(d, name)
+        if os.path.isdir(p):
+            return p
+    return None
+
+
+def base_accent_of(theme_dir):
+    """The accent the base variant was built with, read from the theme itself."""
+    css = os.path.join(theme_dir, "gtk-3.0/gtk.css")
+    with open(css, encoding="utf-8") as f:
+        m = re.search(r"@define-color\s+theme_selected_bg_color\s+(#[0-9a-fA-F]{6})",
+                      f.read())
+    return m.group(1).lower() if m else "#f44336"
+
+
+# -------------------------------------------------------------- mapping ---
+JASPER_BG_L = lightness("#212121")
+
+RGBA_RE = re.compile(r"rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)")
+
+
+def hue_sat(h):
+    hh, _ll, ss = colorsys.rgb_to_hls(*to_rgb(h))
+    return hh, ss
+
+
+def accent_lines(base_path, ref_path):
+    """Line numbers where two variants of the same theme disagree.
+
+    Grey and Red are the same stylesheet with one colour swapped, so a line
+    that differs between them is, by construction, a line the accent is on.
+    That is what makes this safe where a hex substitution is not: Red paints
+    its accent and its error colour with the same #F44336, and only position
+    tells the two apart.
+    """
+    try:
+        with open(base_path, encoding="utf-8") as f:
+            b = f.read().splitlines()
+        with open(ref_path, encoding="utf-8") as f:
+            r = f.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if len(b) != len(r):
+        return None
+    return {i for i, (x, y) in enumerate(zip(b, r)) if x != y}
+
+
+class Recolour:
+    def __init__(self, accent, wal_bg, sat_scale, base_accent,
+                 ground="#000000", lift=1.3):
+        self.accent = accent
+        self.wal_bg = wal_bg
+        self.sat_scale = sat_scale
+        self.ground_L = lightness(ground)
+        self.lift = lift
+        self.base_accent = base_accent
+        self.base_L = lightness(base_accent)
+        self.base_hue, _ = hue_sat(base_accent)
+        self.neutrals = {}
+        self.accents = {}
+
+    def is_base_accent(self, h):
+        """Same hue family as the base theme's accent, and actually coloured."""
+        hh, ss = hue_sat(h)
+        if ss < 0.15:
+            return False
+        d = abs(hh - self.base_hue)
+        return min(d, 1.0 - d) < 0.08
+
+    def map_accent(self, h):
+        if h not in self.accents:
+            self.accents[h] = shift_lightness(self.accent, lightness(h) - self.base_L)
+        return self.accents[h]
+
+    def map_neutral(self, h):
+        """Jasper's neutral, re-anchored on the ground and retinted.
+
+        Every grey keeps its distance above Jasper's own window background, so
+        the ladder survives; only where the ladder *starts* changes. With the
+        ground at black the window background lands on true black, and `lift`
+        opens the steps above it back up, since Jasper's own gap between
+        window and card is barely 4% and vanishes against black.
+        """
+        if h not in self.neutrals:
+            step = (lightness(h) - JASPER_BG_L) * self.lift
+            L = max(0.0, min(1.0, self.ground_L + step))
+            hh, ss = hue_sat(self.wal_bg)
+            self.neutrals[h] = to_hex(
+                colorsys.hls_to_rgb(hh, L, min(1.0, ss * self.sat_scale)))
+        return self.neutrals[h]
+
+    def colour(self, h, on_accent_line):
+        """One colour, or None to leave it exactly as it was."""
+        L = lightness(h)
+        if on_accent_line and self.is_base_accent(h):
+            return self.map_accent(h)
+        if is_grey(h) and 0.001 < L < 0.97:
+            return self.map_neutral(h)
+        return None                      # status colours, black, white
+
+    def line(self, text, on_accent_line):
+        def hex_sub(m):
+            h = m.group(0).lower()
+            if len(h) == 4:
+                h = "#" + "".join(c * 2 for c in h[1:])
+            new = self.colour(h, on_accent_line)
+            return new if new else m.group(0)
+
+        def rgba_sub(m):
+            r, g, b, a = m.group(1), m.group(2), m.group(3), m.group(4)
+            h = to_hex((int(r) / 255, int(g) / 255, int(b) / 255))
+            # pure black and pure white carry shadow and type, never the accent
+            if h in ("#000000", "#ffffff"):
+                return m.group(0)
+            new = self.colour(h, on_accent_line)
+            if not new:
+                return m.group(0)
+            nr, ng, nb = (round(c * 255) for c in to_rgb(new))
+            return f"rgba({nr}, {ng}, {nb}, {a})"
+
+        return HEX_RE.sub(hex_sub, RGBA_RE.sub(rgba_sub, text))
+
+
+# --------------------------------------------------------------- output ---
+def generate(base_dir, ref_dir, out_dir, name, accent, wal_bg, sat_scale,
+             base_accent, ground, lift, quiet):
+    rc = Recolour(accent, wal_bg, sat_scale, base_accent, ground, lift)
+    # white on the accent, unless the accent is bright enough to need dark
+    sel_fg = "rgba(0, 0, 0, 0.87)" if best_fg(accent) == "#000000" else "#FFFFFF"
+
+    if os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+    shutil.copytree(base_dir, out_dir, symlinks=True)
+
+    rewritten = 0
+    no_pairing = 0
+    for dirpath, _d, files in os.walk(out_dir):
+        for fn in files:
+            if not fn.endswith(TEXT_SUFFIXES):
+                continue
+            p = os.path.join(dirpath, fn)
+            rel = os.path.relpath(p, out_dir)
+            try:
+                with open(p, encoding="utf-8") as f:
+                    src = f.read()
+            except (UnicodeDecodeError, OSError):
+                continue
+
+            marks = accent_lines(os.path.join(base_dir, rel),
+                                 os.path.join(ref_dir, rel)) if ref_dir else None
+            if marks is None:
+                # no comparable variant for this file: treat every line as a
+                # candidate, which the hue test still keeps honest
+                no_pairing += 1
+                marks = None
+
+            out_lines = []
+            for i, ln in enumerate(src.splitlines()):
+                on_accent = True if marks is None else (i in marks)
+                out_lines.append(rc.line(ln, on_accent))
+            new = "\n".join(out_lines) + ("\n" if src.endswith("\n") else "")
+
+            if new != src:
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(new)
+                rewritten += 1
+
+    # the one value that is about contrast rather than hue
+    for rel in ("gtk-3.0/gtk.css", "gtk-3.0/gtk-dark.css",
+                "gtk-4.0/gtk.css", "gtk-4.0/gtk-dark.css"):
+        p = os.path.join(out_dir, rel)
+        if not os.path.exists(p):
+            continue
+        with open(p, encoding="utf-8") as f:
+            t = f.read()
+        t = re.sub(r"(@define-color\s+theme(?:_unfocused)?_selected_fg_color\s+)[^;]+;",
+                   rf"\g<1>{sel_fg};", t)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(t)
+
+    idx = os.path.join(out_dir, "index.theme")
+    if os.path.exists(idx):
+        with open(idx, encoding="utf-8") as f:
+            t = f.read()
+        for key in ("Name", "GtkTheme", "MetacityTheme"):
+            t = re.sub(rf"(?m)^{key}=.*$", f"{key}={name}", t)
+        with open(idx, "w", encoding="utf-8") as f:
+            f.write(t)
+
+    tint_pngs(out_dir, rc.accents, quiet)
+    if not quiet:
+        print(f"  {rewritten} files rewritten "
+              f"({len(rc.accents)} accent shades, {len(rc.neutrals)} neutrals)")
+        if no_pairing:
+            print(f"  {no_pairing} files had no variant to compare against")
+    return rc, sel_fg
+
+
+def tint_pngs(out_dir, accents, quiet):
+    """Recolour the accent-carrying PNGs (slider tick marks and gtk-2.0 widgets).
+
+    They are flat single-colour glyphs over alpha, so a fuzzy opaque swap is
+    enough; without ImageMagick they simply keep the base accent, which is why
+    this never fails the run.
+    """
+    magick = shutil.which("magick") or shutil.which("convert")
+    if not magick:
+        if not quiet:
+            print("  no ImageMagick: PNG assets keep the base accent")
+        return
+    done = 0
+    for dirpath, _d, files in os.walk(out_dir):
+        for fn in files:
+            if not fn.endswith(".png") or fn == "thumbnail.png":
+                continue
+            p = os.path.join(dirpath, fn)
+            cmd = [magick, p]
+            for old, new in accents.items():
+                cmd += ["-fuzz", "12%", "-fill", new, "-opaque", old]
+            cmd.append(p)
+            if subprocess.run(cmd, capture_output=True).returncode == 0:
+                done += 1
+    if not quiet:
+        print(f"  {done} PNG assets retinted")
+
+
+# ---------------------------------------------------------------- wiring ---
+def write_ini(path, settings):
+    """Set keys in a GTK settings.ini, leaving everything else alone."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    lines = []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    if not lines or not lines[0].strip().startswith("["):
+        lines.insert(0, "[Settings]")
+    for key, val in settings.items():
+        for i, ln in enumerate(lines):
+            if ln.split("=")[0].strip() == key:
+                lines[i] = f"{key}={val}"
+                break
+        else:
+            lines.insert(1, f"{key}={val}")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+ADW_TEMPLATE = """\
+/* ---- pywal, for libadwaita ----------------------------------------------
+   libadwaita apps load no theme at all: gtk-theme-name does nothing to them.
+   The one thing they do read is this file, and only under their own colour
+   names, so the palette has to be restated here rather than inherited. */
+@define-color window_bg_color {bg};
+@define-color window_fg_color {fg};
+@define-color view_bg_color {base};
+@define-color view_fg_color {fg};
+@define-color headerbar_bg_color {surface};
+@define-color headerbar_fg_color {fg};
+@define-color headerbar_border_color {fg};
+@define-color headerbar_backdrop_color {bg};
+@define-color headerbar_shade_color {shade};
+@define-color sidebar_bg_color {surface};
+@define-color sidebar_fg_color {fg};
+@define-color sidebar_backdrop_color {bg};
+@define-color sidebar_shade_color {shade};
+@define-color secondary_sidebar_bg_color {surface};
+@define-color secondary_sidebar_fg_color {fg};
+@define-color card_bg_color {base};
+@define-color card_fg_color {fg};
+@define-color card_shade_color {shade};
+@define-color dialog_bg_color {surface};
+@define-color dialog_fg_color {fg};
+@define-color popover_bg_color {surface};
+@define-color popover_fg_color {fg};
+@define-color thumbnail_bg_color {base};
+@define-color thumbnail_fg_color {fg};
+@define-color shade_color {shade};
+@define-color scrollbar_outline_color {shade};
+@define-color accent_bg_color {accent};
+@define-color accent_fg_color {accent_fg};
+@define-color accent_color {accent_text};
+/* signals stay signals, exactly as in the GTK3 sheet */
+@define-color destructive_bg_color #F44336;
+@define-color destructive_fg_color #FFFFFF;
+@define-color destructive_color #F44336;
+@define-color error_bg_color #F44336;
+@define-color error_fg_color #FFFFFF;
+@define-color error_color #F44336;
+@define-color warning_bg_color #FBC02D;
+@define-color warning_fg_color rgba(0, 0, 0, 0.87);
+@define-color warning_color #FBC02D;
+@define-color success_bg_color #95dbc2;
+@define-color success_fg_color rgba(0, 0, 0, 0.87);
+@define-color success_color #95dbc2;
+/* ------------------------------------------------------------------------ */
+
+"""
+
+
+def libadwaita_block(css_path, palette):
+    with open(css_path, encoding="utf-8") as f:
+        body = f.read()
+    with open(css_path, "w", encoding="utf-8") as f:
+        f.write(ADW_TEMPLATE.format(**palette) + body)
+
+
+def wire_gtk(theme_dir, name, palette, quiet):
+    """GTK3, GTK4, and the libadwaita apps that ignore themes entirely."""
+    for v in ("gtk-3.0", "gtk-4.0"):
+        write_ini(os.path.join(HOME, ".config", v, "settings.ini"),
+                  {"gtk-theme-name": name, "gtk-application-prefer-dark-theme": "1"})
+
+    # libadwaita reads no theme at all — its only hook is this file, so the
+    # theme's own gtk-4.0 sheet is copied in rather than selected.
+    dst = os.path.join(HOME, ".config/gtk-4.0")
+    src_css = os.path.join(theme_dir, "gtk-4.0/gtk.css")
+    if os.path.exists(src_css):
+        # whatever is here may be a symlink into a theme that no longer exists,
+        # so clear by lexists rather than exists — a dangling link is invisible
+        # to the latter and cannot be written through
+        for leaf, src in (("gtk.css", src_css),
+                          ("gtk-dark.css", os.path.join(theme_dir, "gtk-4.0/gtk-dark.css")),
+                          ("assets", os.path.join(theme_dir, "gtk-4.0/assets"))):
+            d = os.path.join(dst, leaf)
+            if os.path.islink(d) or os.path.isfile(d):
+                os.unlink(d)
+            elif os.path.isdir(d):
+                shutil.rmtree(d)
+            if os.path.isdir(src):
+                shutil.copytree(src, d)
+            elif os.path.exists(src):
+                shutil.copy2(src, d)
+        libadwaita_block(os.path.join(dst, "gtk.css"), palette)
+        if not quiet:
+            print("  libadwaita: colour overrides prepended to "
+                  "~/.config/gtk-4.0/gtk.css")
+
+    for schema, key, val in (
+        ("org.gnome.desktop.interface", "gtk-theme", name),
+        ("org.gnome.desktop.interface", "color-scheme", "prefer-dark"),
+    ):
+        subprocess.run(["gsettings", "set", schema, key, val], capture_output=True)
+
+
+QT_ROLES = [
+    "WindowText", "Button", "Light", "Midlight", "Dark", "Mid", "Text",
+    "BrightText", "ButtonText", "Base", "Window", "Shadow", "Highlight",
+    "HighlightedText", "Link", "LinkVisited", "AlternateBase", "NoRole",
+    "ToolTipBase", "ToolTipText",
+]
+
+
+def wire_qt(accent, sel_fg, bg, base, fg, quiet):
+    """A qt6ct palette, so Qt apps land on the same colours as GTK ones."""
+    conf_dir = os.path.join(HOME, ".config/qt6ct")
+    if not os.path.isdir(conf_dir):
+        if not quiet:
+            print("  no qt6ct config: skipping Qt")
+        return
+    scheme_dir = os.path.join(conf_dir, "colors")
+    os.makedirs(scheme_dir, exist_ok=True)
+
+    hi_fg = best_fg(accent)
+    active = {
+        "WindowText": fg, "Button": base, "Light": shift_lightness(base, 0.10),
+        "Midlight": shift_lightness(base, 0.06), "Dark": shift_lightness(bg, -0.04),
+        "Mid": shift_lightness(base, -0.02), "Text": fg, "BrightText": "#ffffff",
+        "ButtonText": fg, "Base": bg, "Window": bg, "Shadow": "#000000",
+        "Highlight": accent, "HighlightedText": hi_fg, "Link": accent,
+        "LinkVisited": shift_lightness(accent, -0.12),
+        "AlternateBase": base, "NoRole": bg,
+        "ToolTipBase": base, "ToolTipText": fg,
+    }
+    dim = {k: (shift_lightness(v, -0.10) if k in ("WindowText", "Text", "ButtonText")
+               else v) for k, v in active.items()}
+
+    def row(d):
+        return ", ".join("#ff" + d[r].lstrip("#") for r in QT_ROLES)
+
+    path = os.path.join(scheme_dir, "pywal.conf")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("[ColorScheme]\n"
+                f"active_colors={row(active)}\n"
+                f"inactive_colors={row(active)}\n"
+                f"disabled_colors={row(dim)}\n")
+
+    conf = os.path.join(conf_dir, "qt6ct.conf")
+    if os.path.exists(conf):
+        with open(conf, encoding="utf-8") as f:
+            t = f.read()
+        t = re.sub(r"(?m)^custom_palette=.*$", "custom_palette=true", t)
+        if "custom_palette=" not in t:
+            t = t.replace("[Appearance]", "[Appearance]\ncustom_palette=true", 1)
+        t = re.sub(r"(?m)^color_scheme_path=.*$", f"color_scheme_path={path}", t)
+        if "color_scheme_path=" not in t:
+            t = t.replace("[Appearance]", f"[Appearance]\ncolor_scheme_path={path}", 1)
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write(t)
+    if not quiet:
+        print("  Qt: qt6ct palette written and selected")
+
+
+def wire_flatpak(name, quiet):
+    """Flatpak apps are sandboxed away from ~/.themes unless told otherwise."""
+    if not shutil.which("flatpak"):
+        return
+    for args in (
+        ["--filesystem=xdg-config/gtk-3.0:ro"],
+        ["--filesystem=xdg-config/gtk-4.0:ro"],
+        [f"--filesystem={HOME}/.themes:ro"],
+        [f"--env=GTK_THEME={name}"],
+    ):
+        subprocess.run(["flatpak", "override", "--user"] + args, capture_output=True)
+    if not quiet:
+        print("  Flatpak: overrides set for ~/.themes and GTK_THEME")
+
+
+def nudge(name, quiet):
+    """GTK watches settings.ini, but only notices the value actually changing."""
+    subprocess.run(["gsettings", "set", "org.gnome.desktop.interface",
+                    "gtk-theme", "Adwaita"], capture_output=True)
+    subprocess.run(["gsettings", "set", "org.gnome.desktop.interface",
+                    "gtk-theme", name], capture_output=True)
+    if not quiet:
+        print("  running GTK apps nudged to reload")
+
+
+# ------------------------------------------------------------------ main ---
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--base", default="Jasper-Red-Dark",
+                    help="variant to build from (default: Jasper-Red-Dark)")
+    ap.add_argument("--ref", default="Jasper-Grey-Dark",
+                    help="variant to diff against to find the accent family")
+    ap.add_argument("--name", default="Jasper-Pywal-Dark")
+    ap.add_argument("--accent", type=int, default=4,
+                    help="pywal colour index for the accent (default: 4, as the shell uses)")
+    ap.add_argument("--saturation", type=float, default=1.0,
+                    help="multiplier on the tint of the neutral ramp")
+    ap.add_argument("--ground", default="#000000",
+                    help="what the window background becomes (default: pitch black)")
+    ap.add_argument("--lift", type=float, default=1.3,
+                    help="how far the surfaces above the ground are opened up")
+    ap.add_argument("--no-apply", action="store_true",
+                    help="build the theme but do not touch any config")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args()
+
+    if not os.path.exists(WAL):
+        sys.exit(f"gtk-pywal: no pywal cache at {WAL} — run `wal -i <image>` first")
+    with open(WAL, encoding="utf-8") as f:
+        wal = json.load(f)
+    accent = wal["colors"][f"color{args.accent}"]
+    wal_bg = wal["special"]["background"]
+
+    base_dir = find_theme(args.base)
+    if not base_dir:
+        sys.exit(f"gtk-pywal: base theme {args.base} not installed")
+    ref_dir = find_theme(args.ref)
+
+    out_dir = os.path.join(HOME, ".themes", args.name)
+    if not args.quiet:
+        print(f"gtk-pywal: {args.base} + pywal colour{args.accent} {accent} -> {args.name}")
+
+    os.makedirs(os.path.join(HOME, ".themes"), exist_ok=True)
+    base_accent = base_accent_of(base_dir)
+    rc, sel_fg = generate(base_dir, ref_dir, out_dir, args.name, accent,
+                          wal_bg, args.saturation, base_accent,
+                          args.ground, args.lift, args.quiet)
+
+    if args.no_apply:
+        if not args.quiet:
+            print(f"  built at {out_dir} (not applied)")
+        return
+
+    bg = rc.map_neutral("#212121")
+    base = rc.map_neutral("#2c2c2c")
+    accent_fg = best_fg(accent)
+    palette = {
+        "bg": bg, "base": base, "fg": "#FFFFFF",
+        "surface": rc.map_neutral("#3c3c3c"),
+        "shade": "rgba(0, 0, 0, 0.36)",
+        "accent": accent, "accent_fg": accent_fg,
+        # the text-weight accent has to clear the ground on its own
+        "accent_text": shift_lightness(accent, 0.22),
+    }
+    wire_gtk(out_dir, args.name, palette, args.quiet)
+    wire_qt(accent, sel_fg, bg, base, "#ffffff", args.quiet)
+    wire_flatpak(args.name, args.quiet)
+    nudge(args.name, args.quiet)
+
+
+if __name__ == "__main__":
+    main()
