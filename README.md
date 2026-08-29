@@ -19,7 +19,6 @@ config/       ~/.config/<name>  — drop-in replacements
 bin/          ~/.local/bin — helper scripts (see below)
 config/wal/   pywal templates
 wallpapers/   wall, wall_1, wall_3, wall_4
-reference/    old-quickshell/ — the previous QML, kept for reference
 ```
 
 ## Quickshell
@@ -27,8 +26,21 @@ reference/    old-quickshell/ — the previous QML, kept for reference
 A fresh shell targeting **Hyprland**, replacing waybar + rofi + dunst.
 Built against Quickshell 0.3.1 / Hyprland 0.56.2.
 
+Two shells live side by side as *named* configs. Neither is the default, so
+neither can shadow the other:
+
 ```
 config/quickshell/
+  hyprland/   the new island shell   ->  qs -c hyprland
+  niri/       the previous shell     ->  qs -c niri
+```
+
+There must be no `shell.qml` directly under `config/quickshell/` — Quickshell
+would register it as the 'default' config and stop scanning subdirectories
+entirely.
+
+```
+config/quickshell/hyprland/
   shell.qml              one Bar per screen + one Launcher
   Theme.qml              design tokens: colour, metrics, type, motion
   services/
@@ -83,8 +95,8 @@ an arithmetic expression is evaluated inline above the results.
 Driven over IPC, so it can be bound from anywhere:
 
 ```sh
-qs -p ~/.config/quickshell ipc call launcher toggle
-qs -p ~/.config/quickshell ipc call launcher open
+qs -c hyprland ipc call launcher toggle
+qs -c hyprland ipc call launcher open
 ```
 
 ### Compositor support
@@ -112,14 +124,15 @@ handing names to Qt.
 Run it:
 
 ```sh
-qs -p ~/.config/quickshell        # foreground, logs to stdout
-qs -p ~/.config/quickshell -d     # daemonized
+qs -c hyprland        # foreground, logs to stdout
+qs -c hyprland -d     # daemonized
+qs -c niri            # the previous shell, unchanged
 ```
 
 To start it with the session, in `hyprland.conf`:
 
 ```
-exec-once = qs -p ~/.config/quickshell
+exec-once = qs -c hyprland
 ```
 
 Notes:
@@ -166,7 +179,7 @@ rather than failing.
 git clone <this-repo> ~/hyprland-waybar-setup
 cd ~/hyprland-waybar-setup
 
-# configs
+# configs (quickshell included — it carries both named configs)
 for d in config/*/; do ln -sfn "$PWD/$d" ~/.config/"$(basename "$d")"; done
 
 # scripts
