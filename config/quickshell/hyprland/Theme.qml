@@ -64,7 +64,7 @@ Singleton {
     // wallpaper, which is black by any other name and takes the window-title
     // island down with it. So the lift is a target lightness carrying the
     // wallpaper's hue, and holds whatever the wallpaper does.
-    readonly property real islandLightness: 0.13
+    readonly property real islandLightness: 0.09
 
     readonly property color base:     inkAndPaper ? ink : walBg
     readonly property color island:   inkAndPaper ? withLightness(walBg, islandLightness)
@@ -101,7 +101,7 @@ Singleton {
     readonly property color yellow: pywalStatusColors && wal ? Pywal.color(3, "#f9e2af") : "#f9e2af"
 
     // ---- metrics ----
-    readonly property int barHeight:    38
+    readonly property int barHeight:    34
     readonly property int barMargin:     8   // gap from the screen edge
     readonly property int islandGap:     8   // gap *between* islands
     readonly property int gap:           8   // gap between items inside an island
