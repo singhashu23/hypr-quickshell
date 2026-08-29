@@ -86,23 +86,27 @@ PanelWindow {
             id: shell
             readonly property int colWidth: 620
 
-            // The wallpaper tile is a fixed size: it is derived from the image's
-            // own ratio and the caps below, never from the card's current
-            // height, so it holds still as results open and close. Capping both
-            // axes keeps a portrait wallpaper from running away vertically.
-            readonly property int wallMaxWidth:  380
-            readonly property int wallMaxHeight: 300
+            // The wallpaper tile is a fixed size: it comes from the image's own
+            // ratio and the caps below, never from what the card is showing.
+            // Capping both axes keeps an ultrawide or portrait wallpaper from
+            // running away along its long edge.
+            readonly property int wallMargin:    12
+            readonly property int wallMaxWidth:  470
+            readonly property int wallMaxHeight: 340
             readonly property real wallAspect: wall.implicitHeight > 0
                                              ? wall.implicitWidth / wall.implicitHeight
                                              : 16 / 9
             readonly property real wallWidth:  root.hasWall ? Math.min(wallMaxWidth, wallMaxHeight * wallAspect) : 0
             readonly property real wallHeight: root.hasWall ? wallWidth / wallAspect : 0
-            readonly property int paneWidth: Math.round(wallWidth)
+            readonly property int paneWidth: root.hasWall ? Math.round(wallWidth + wallMargin * 2) : 0
 
+            // Both axes are fixed. The card is the tile plus its margins, so a
+            // growing result list scrolls inside a static body rather than
+            // resizing the launcher under the cursor. Only a wallpaper of a
+            // different shape moves these, which is what the Behaviors are for.
             width: paneWidth + colWidth
-            // at rest the card is exactly as tall as the tile, so the tile sits
-            // flush in the corner; while searching the card grows past it
-            height: Math.max(header.height + body.height, wallHeight)
+            height: root.hasWall ? Math.round(wallHeight + wallMargin * 2)
+                                 : header.height + 150
             radius: Theme.radius + 4
             color: Theme.island
             border.width: Theme.borderWidth
@@ -113,22 +117,16 @@ PanelWindow {
             Behavior on width  { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
 
             // ---------- left: the current wallpaper, entire ----------
-            // Flush with the card's left edge and rounded to match it, square on
-            // the side that meets the search column.
+            // Inset from the card on every side by the same margin, so it reads
+            // as a tile resting on the island rather than a bleed off its edge.
             Rectangle {
                 id: wallTile
                 visible: root.hasWall
-                x: 0
-                y: 0
+                x: shell.wallMargin
+                y: shell.wallMargin
                 width:  shell.wallWidth
                 height: shell.wallHeight
-
-                // rounded where it meets the card's own corners: always at the
-                // top, and at the bottom only while the tile still reaches it
-                topLeftRadius: shell.radius
-                bottomLeftRadius: height >= shell.height - 0.5 ? shell.radius : 0
-                topRightRadius: 0
-                bottomRightRadius: 0
+                radius: Theme.radius
 
                 color: Theme.surface0
                 clip: true
@@ -210,11 +208,9 @@ PanelWindow {
                 anchors.top: header.bottom
                 x: shell.paneWidth
                 width: shell.colWidth
-                height: root.searching ? Math.min(list.contentHeight, 360) + (calcRow.visible ? calcRow.height : 0) + Theme.gap * 2
-                       : root.hasWall ? Math.max(120, shell.wallHeight - header.height)
-                                      : 150
-
-                Behavior on height { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
+                // whatever the card has left under the search field — static,
+                // so a long result list scrolls instead of growing the launcher
+                height: shell.height - header.height
 
                 // at rest
                 Column {
