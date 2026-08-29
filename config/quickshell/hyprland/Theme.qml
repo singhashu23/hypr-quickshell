@@ -41,6 +41,14 @@ Singleton {
         return Qt.rgba(cc.r, cc.g, cc.b, a)
     }
 
+    // Saturation scaled about a colour's own lightness, hue kept.
+    function saturate(c, k) {
+        const cc = Qt.darker(c, 1.0)
+        const l = (Math.max(cc.r, cc.g, cc.b) + Math.min(cc.r, cc.g, cc.b)) / 2
+        const ch = v => Math.max(0, Math.min(1, l + (v - l) * k))
+        return Qt.rgba(ch(cc.r), ch(cc.g), ch(cc.b), 1)
+    }
+
     // A colour moved to a target lightness, its hue kept.
     function withLightness(c, l) {
         const cc = Qt.darker(c, 1.0)
@@ -58,16 +66,21 @@ Singleton {
     readonly property color walFg: wal ? Pywal.foreground : "#cdd6f4"
 
     // ---- surfaces ----
-    // The ground is pitch black; an island has to read as a slab lifted off
-    // it. Lifting by a *ratio* toward the wallpaper fails whenever the palette
-    // is itself near-black — mix(ink, walBg, 0.35) lands on #060a0c for a dark
-    // wallpaper, which is black by any other name and takes the window-title
-    // island down with it. So the lift is a target lightness carrying the
-    // wallpaper's hue, and holds whatever the wallpaper does.
-    readonly property real islandLightness: 0.09
+    // Islands sit just off pitch black, carrying a breath of the wallpaper
+    // rather than a share of it.
+    //
+    // Two things have to be set separately to get there. The lift is a target
+    // lightness, not a ratio toward the wallpaper: mixing fails whenever the
+    // palette is itself near-black, landing on #060a0c for a dark wallpaper —
+    // black by another name, taking the window-title island with it. And the
+    // tint has to be scaled up, because at 4% lightness the absolute distance
+    // between channels is tiny, so carrying the palette's own saturation
+    // reads as flat black however colourful the wallpaper is.
+    readonly property real islandLightness: 0.045
+    readonly property real islandTint:      2.4
 
     readonly property color base:     inkAndPaper ? ink : walBg
-    readonly property color island:   inkAndPaper ? withLightness(walBg, islandLightness)
+    readonly property color island:   inkAndPaper ? saturate(withLightness(walBg, islandLightness), islandTint)
                                                   : mix(walBg, "black", 0.25)
     readonly property color surface0: mix(island, bone, 0.09)
     readonly property color surface1: mix(island, bone, 0.16)
