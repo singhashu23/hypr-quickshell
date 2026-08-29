@@ -82,9 +82,16 @@ def best_fg(bg, dark="#000000", light="#FFFFFF"):
     return dark if contrast(dark, bg) >= contrast(light, bg) else light
 
 
-def is_grey(h):
-    r, g, b = to_rgb(h)
-    return abs(r - g) < 0.02 and abs(g - b) < 0.02
+def is_neutral(h, max_sat=0.22):
+    """A surface colour rather than a meaningful one.
+
+    Not the same as achromatic: Jasper's greys are literally R=G=B, but
+    Orchis-Dracula's are blue-tinted (#1c1e26 is 28/30/38), and testing for
+    equal channels silently passes the entire neutral ramp through unchanged.
+    Low saturation is the property that actually distinguishes a surface from
+    a signal — the status colours all sit far above this line.
+    """
+    return hue_sat(h)[1] < max_sat
 
 
 def shift_lightness(base_hex, delta):
@@ -110,6 +117,28 @@ def find_theme(name):
     return None
 
 
+def _define(theme_dir, name, default):
+    """Read one @define-color out of a theme's own stylesheet."""
+    for rel in ("gtk-3.0/gtk.css", "gtk-4.0/gtk.css"):
+        css = os.path.join(theme_dir, rel)
+        if not os.path.exists(css):
+            continue
+        with open(css, encoding="utf-8") as f:
+            m = re.search(r"@define-color\s+" + name + r"\s+(#[0-9a-fA-F]{6})", f.read())
+        if m:
+            return m.group(1).lower()
+    return default
+
+
+def base_bg_of(theme_dir):
+    """The base theme's own window background — the rung the ladder starts on.
+
+    Read rather than assumed: Jasper's is #212121 and Orchis's is #1c1e26, and
+    anchoring one theme's ladder on the other's background shifts every surface.
+    """
+    return _define(theme_dir, "theme_bg_color", "#212121")
+
+
 def base_accent_of(theme_dir):
     """The accent the base variant was built with, read from the theme itself."""
     css = os.path.join(theme_dir, "gtk-3.0/gtk.css")
@@ -120,7 +149,7 @@ def base_accent_of(theme_dir):
 
 
 # -------------------------------------------------------------- mapping ---
-JASPER_BG_L = lightness("#212121")
+
 
 RGBA_RE = re.compile(r"rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)")
 
@@ -152,7 +181,7 @@ def accent_lines(base_path, ref_path):
 
 
 class Recolour:
-    def __init__(self, accent, wal_bg, sat_scale, base_accent,
+    def __init__(self, accent, wal_bg, sat_scale, base_accent, base_bg,
                  ground="#000000", lift=1.3):
         self.accent = accent
         self.wal_bg = wal_bg
@@ -162,6 +191,7 @@ class Recolour:
         self.base_accent = base_accent
         self.base_L = lightness(base_accent)
         self.base_hue, _ = hue_sat(base_accent)
+        self.base_bg_L = lightness(base_bg)
         self.neutrals = {}
         self.accents = {}
 
@@ -181,14 +211,14 @@ class Recolour:
     def map_neutral(self, h):
         """Jasper's neutral, re-anchored on the ground and retinted.
 
-        Every grey keeps its distance above Jasper's own window background, so
+        Every grey keeps its distance above the base theme's own background, so
         the ladder survives; only where the ladder *starts* changes. With the
         ground at black the window background lands on true black, and `lift`
         opens the steps above it back up, since Jasper's own gap between
         window and card is barely 4% and vanishes against black.
         """
         if h not in self.neutrals:
-            step = (lightness(h) - JASPER_BG_L) * self.lift
+            step = (lightness(h) - self.base_bg_L) * self.lift
             L = max(0.0, min(1.0, self.ground_L + step))
             hh, ss = hue_sat(self.wal_bg)
             self.neutrals[h] = to_hex(
@@ -200,7 +230,7 @@ class Recolour:
         L = lightness(h)
         if on_accent_line and self.is_base_accent(h):
             return self.map_accent(h)
-        if is_grey(h) and 0.001 < L < 0.97:
+        if is_neutral(h) and 0.001 < L < 0.97:
             return self.map_neutral(h)
         return None                      # status colours, black, white
 
@@ -229,8 +259,8 @@ class Recolour:
 
 # --------------------------------------------------------------- output ---
 def generate(base_dir, ref_dir, out_dir, name, accent, wal_bg, sat_scale,
-             base_accent, ground, lift, quiet):
-    rc = Recolour(accent, wal_bg, sat_scale, base_accent, ground, lift)
+             base_accent, base_bg, ground, lift, quiet):
+    rc = Recolour(accent, wal_bg, sat_scale, base_accent, base_bg, ground, lift)
     # white on the accent, unless the accent is bright enough to need dark
     sel_fg = "rgba(0, 0, 0, 0.87)" if best_fg(accent) == "#000000" else "#FFFFFF"
 
@@ -281,6 +311,10 @@ def generate(base_dir, ref_dir, out_dir, name, accent, wal_bg, sat_scale,
             t = f.read()
         t = re.sub(r"(@define-color\s+theme(?:_unfocused)?_selected_fg_color\s+)[^;]+;",
                    rf"\g<1>{sel_fg};", t)
+        # Orchis states libadwaita's own names; its accent_fg is the same
+        # contrast call, and is `white` in the variant we build from
+        t = re.sub(r"(@define-color\s+accent_fg_color\s+)[^;]+;",
+                   r"\g<1>" + best_fg(accent) + ";", t)
         with open(p, "w", encoding="utf-8") as f:
             f.write(t)
 
@@ -535,11 +569,12 @@ def nudge(name, quiet):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", default="Jasper-Red-Dark",
-                    help="variant to build from (default: Jasper-Red-Dark)")
-    ap.add_argument("--ref", default="Jasper-Grey-Dark",
-                    help="variant to diff against to find the accent family")
-    ap.add_argument("--name", default="Jasper-Pywal-Dark")
+    ap.add_argument("--base", default="Orchis-Red-Dark-Dracula",
+                    help="variant to build from; must be one shaped for a "
+                         "coloured accent, never a grey one")
+    ap.add_argument("--ref", default="Orchis-Grey-Dark-Dracula",
+                    help="sibling variant to diff against, to find the accent")
+    ap.add_argument("--name", default="Orchis-Pywal-Dark")
     ap.add_argument("--accent", type=int, default=4,
                     help="pywal colour index for the accent (default: 4, as the shell uses)")
     ap.add_argument("--saturation", type=float, default=1.0,
@@ -571,8 +606,9 @@ def main():
 
     os.makedirs(os.path.join(HOME, ".themes"), exist_ok=True)
     base_accent = base_accent_of(base_dir)
+    base_bg = base_bg_of(base_dir)
     rc, sel_fg = generate(base_dir, ref_dir, out_dir, args.name, accent,
-                          wal_bg, args.saturation, base_accent,
+                          wal_bg, args.saturation, base_accent, base_bg,
                           args.ground, args.lift, args.quiet)
 
     if args.no_apply:
