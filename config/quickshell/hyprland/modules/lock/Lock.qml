@@ -187,7 +187,7 @@ Scope {
                     color: Theme.text
                     font.family: Theme.uiFont
                     font.pixelSize: 132
-                    font.weight: Font.Light
+                    font.weight: Font.Medium
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
