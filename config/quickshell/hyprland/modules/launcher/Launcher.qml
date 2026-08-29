@@ -13,6 +13,11 @@ PanelWindow {
     property bool active: false
     property string query: ""
     property int index: 0
+
+    // the wallpaper pywal last themed from; "" until its cache exists
+    readonly property string wallpaper: Pywal.wallpaper
+    readonly property bool hasWall: wallpaper !== ""
+
     readonly property var results: Apps.search(query)
     readonly property bool searching: query.trim() !== ""
 
@@ -66,7 +71,7 @@ PanelWindow {
         id: card
         anchors.horizontalCenter: parent.horizontalCenter
         y: parent.height * 0.18
-        width: 620
+        width: shell.width
         height: shell.height
 
         opacity: root.active ? 1 : 0
@@ -79,7 +84,10 @@ PanelWindow {
 
         Rectangle {
             id: shell
-            width: parent.width
+            readonly property int colWidth: 620
+            readonly property int paneWidth: root.hasWall ? 248 : 0
+
+            width: paneWidth + colWidth
             height: header.height + body.height
             radius: Theme.radius + 4
             color: Theme.island
@@ -88,11 +96,64 @@ PanelWindow {
             clip: true
 
             Behavior on height { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
+            Behavior on width  { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
+
+            // ---------- left: the current wallpaper, entire ----------
+            Item {
+                id: wallPane
+                visible: root.hasWall
+                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                width: shell.paneWidth
+
+                readonly property real boxWidth:  width  - Theme.padding * 2
+                readonly property real boxHeight: height - Theme.padding * 2
+                // the image's own ratio, taken from the source rather than the
+                // frame, so reading it back to size the frame is not a loop
+                readonly property real aspect: wall.implicitHeight > 0
+                                             ? wall.implicitWidth / wall.implicitHeight
+                                             : 16 / 9
+
+                // The frame carries the wallpaper's aspect ratio, so the picture
+                // is shown whole — fitted inside the box, never cropped, and with
+                // no letterbox bars left over inside the frame.
+                Rectangle {
+                    anchors.centerIn: parent
+                    width:  Math.min(wallPane.boxWidth, wallPane.boxHeight * wallPane.aspect)
+                    height: width / wallPane.aspect
+                    radius: Theme.radiusSmall
+                    color: Theme.surface0
+                    border.width: Theme.borderWidth
+                    border.color: Theme.border
+                    clip: true
+
+                    Behavior on width  { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
+                    Behavior on height { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
+
+                    Image {
+                        id: wall
+                        anchors.fill: parent
+                        anchors.margins: Theme.borderWidth
+                        source: root.hasWall ? "file://" + root.wallpaper : ""
+                        fillMode: Image.PreserveAspectFit
+                        sourceSize.width: 720   // downscale on load; the pane is small
+                        asynchronous: true
+                        smooth: true
+                    }
+                }
+
+                Rectangle {
+                    anchors { right: parent.right; top: parent.top; bottom: parent.bottom
+                              topMargin: Theme.padding; bottomMargin: Theme.padding }
+                    width: 1
+                    color: Theme.border
+                }
+            }
 
             // ---------- header: search ----------
             Item {
                 id: header
-                width: parent.width
+                x: shell.paneWidth
+                width: shell.colWidth
                 height: 62
 
                 Text {
@@ -150,7 +211,8 @@ PanelWindow {
             Item {
                 id: body
                 anchors.top: header.bottom
-                width: parent.width
+                x: shell.paneWidth
+                width: shell.colWidth
                 height: root.searching ? Math.min(list.contentHeight, 360) + (calcRow.visible ? calcRow.height : 0) + Theme.gap * 2
                                        : 150
 

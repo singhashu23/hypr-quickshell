@@ -64,7 +64,7 @@ config/quickshell/hyprland/
     Battery.qml          UPower
     Clock.qml            click to toggle seconds
   modules/launcher/
-    Launcher.qml         clock at rest; apps + calculator on search
+    Launcher.qml         wallpaper pane; clock at rest; apps + calculator on search
   modules/notifications/
     Notifications.qml    org.freedesktop.Notifications daemon + toast stack
     NotificationCard.qml a single toast, shaped like every other island
