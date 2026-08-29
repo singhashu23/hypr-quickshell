@@ -2,12 +2,16 @@
 
 import Quickshell
 import qs.modules.bar
+import qs.modules.launcher
 
-// One bar per connected monitor; Variants keeps them in sync as outputs
-// come and go.
 ShellRoot {
+    // one island bar per connected monitor
     Variants {
         model: Quickshell.screens
         delegate: Bar {}
     }
+
+    // single launcher, toggled over IPC:
+    //   qs -p ~/.config/quickshell ipc call launcher toggle
+    Launcher {}
 }

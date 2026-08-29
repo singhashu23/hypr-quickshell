@@ -1,53 +1,52 @@
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import qs
+import qs.services
 
-// Workspace pills. Under a non-Hyprland compositor Hyprland.workspaces is empty
-// and this collapses to nothing rather than erroring.
 Row {
     id: root
-    required property var screenName
-    spacing: Theme.gap / 2
+    required property string screenName
+    spacing: Theme.gap * 0.5
+    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
     Repeater {
         model: ScriptModel {
-            // only workspaces on this monitor, sorted by id
-            values: [...Hyprland.workspaces.values]
-                .filter(ws => !ws.monitor || ws.monitor.name === root.screenName)
-                .sort((a, b) => a.id - b.id)
+            values: Compositor.workspaces.filter(w => w.output === "" || w.output === root.screenName)
         }
 
         delegate: Rectangle {
             id: chip
             required property var modelData
-            readonly property bool isActive: modelData.focused
+            readonly property bool isFocused: modelData.focused
 
-            implicitWidth: isActive ? 32 : 24
-            implicitHeight: Theme.barHeight - Theme.barMargin * 2
-            radius: Theme.radius
-            color: isActive ? Theme.accent
+            implicitWidth: isFocused ? 34 : 22
+            implicitHeight: Theme.barHeight - Theme.gap * 1.75
+            radius: Theme.radiusSmall
+
+            color: isFocused ? Theme.accent
                  : modelData.urgent ? Theme.red
                  : ma.containsMouse ? Theme.surface1
                  : Theme.surface0
 
-            Behavior on implicitWidth { NumberAnimation { duration: Theme.animNormal; easing.type: Easing.OutCubic } }
+            Behavior on implicitWidth { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
             Behavior on color { ColorAnimation { duration: Theme.animFast } }
 
             Text {
                 anchors.centerIn: parent
                 text: chip.modelData.name
-                color: chip.isActive ? Theme.crust : Theme.subtext
+                color: chip.isFocused ? Theme.ink : Theme.subtext
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize
-                font.bold: chip.isActive
+                font.bold: chip.isFocused
+                Behavior on color { ColorAnimation { duration: Theme.animFast } }
             }
 
             MouseArea {
                 id: ma
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked: Hyprland.dispatch("workspace " + chip.modelData.id)
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Compositor.focus(chip.modelData)
             }
         }
     }

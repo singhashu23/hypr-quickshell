@@ -2,6 +2,8 @@ import QtQuick
 import Quickshell
 import qs
 
+// Island bar: a transparent panel carrying three separate slabs. The panel
+// itself reserves the strip; the islands float inside it.
 PanelWindow {
     id: bar
     required property var modelData
@@ -10,41 +12,34 @@ PanelWindow {
     color: "transparent"
 
     anchors { top: true; left: true; right: true }
-    implicitHeight: Theme.barHeight
-    margins { left: Theme.barMargin; right: Theme.barMargin; top: Theme.barMargin }
+    implicitHeight: Theme.barHeight + Theme.barMargin * 2
 
-    Rectangle {
+    Item {
         anchors.fill: parent
-        radius: Theme.radius + 2
-        color: Theme.mantle
-    }
+        anchors.margins: Theme.barMargin
 
-    // ---- left ----
-    Row {
-        anchors { left: parent.left; leftMargin: Theme.barMargin; verticalCenter: parent.verticalCenter }
-        spacing: Theme.gap
+        // ---- left island ----
+        Island {
+            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+            Workspaces { screenName: bar.modelData.name }
+        }
 
-        Workspaces { screenName: bar.modelData.name }
-        MediaPlayer {}
-    }
+        // ---- centre island ----
+        Island {
+            anchors.centerIn: parent
+            MediaPlayer {}
+            ActiveWindow { maxWidth: bar.width * 0.30 }
+        }
 
-    // ---- center ----
-    ActiveWindow {
-        anchors.centerIn: parent
-        width: Math.min(implicitWidth, bar.width * 0.35)
-        horizontalAlignment: Text.AlignHCenter
-    }
-
-    // ---- right ----
-    Row {
-        anchors { right: parent.right; rightMargin: Theme.barMargin; verticalCenter: parent.verticalCenter }
-        spacing: Theme.gap
-
-        Tray {}
-        Backlight {}
-        Audio {}
-        Network {}
-        Battery {}
-        Clock {}
+        // ---- right island ----
+        Island {
+            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+            Tray {}
+            Backlight {}
+            Audio {}
+            Network {}
+            Battery {}
+            Clock {}
+        }
     }
 }

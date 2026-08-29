@@ -29,14 +29,21 @@ Built against Quickshell 0.3.1 / Hyprland 0.56.2.
 
 ```
 config/quickshell/
-  shell.qml              one Bar per connected screen, via Variants
-  Theme.qml              singleton: palette (Catppuccin Mocha), metrics, fonts
+  shell.qml              one Bar per screen + one Launcher
+  Theme.qml              design tokens: colour, metrics, type, motion
+  services/
+    Pywal.qml            live ~/.cache/wal/colors.json
+    Gtk.qml              the desktop's GTK theme, icon theme and font
+    Apps.qml             desktop-entry index + ranked search
+    Compositor.qml       workspaces, over Hyprland or niri
+  scripts/apps.py        .desktop scanner; resolves icons via the GTK theme
   modules/bar/
-    Bar.qml              PanelWindow — left / center / right layout
-    Pill.qml             shared rounded container (hover, click, scroll)
-    IconLabel.qml        shared icon + text pair
-    Workspaces.qml       Hyprland workspaces, click to switch
-    ActiveWindow.qml     focused window title (via ToplevelManager)
+    Bar.qml              transparent panel holding three islands
+    Island.qml           the rounded slab itself
+    Pill.qml             an item inside an island (hover, click, scroll)
+    IconLabel.qml        icon + text pair
+    Workspaces.qml       click to switch
+    ActiveWindow.qml     focused window title (ToplevelManager)
     MediaPlayer.qml      MPRIS — click to play/pause
     Tray.qml             StatusNotifierItem tray
     Backlight.qml        brightnessctl, scroll to adjust
@@ -44,7 +51,63 @@ config/quickshell/
     Network.qml          nmcli — SSID and signal
     Battery.qml          UPower
     Clock.qml            click to toggle seconds
+  modules/launcher/
+    Launcher.qml         clock at rest; apps + calculator on search
 ```
+
+### Design language
+
+Follows [ryoku](https://github.com/neur0map/ryoku-arch): paper and ink — warm
+bone type on pure black — with the frame retinting live from the wallpaper, and
+one motion language across every surface.
+
+That splits cleanly in `Theme.qml`. The **ground** is fixed near-black and the
+**type** is a fixed warm bone, because those two carry legibility. pywal drives
+the **accents, borders and highlights**, which is where wallpaper colour
+actually belongs. Set `inkAndPaper: false` to tint the ground from the wallpaper
+too.
+
+Surfaces are **islands**: discrete rounded slabs with real gaps between them,
+sharing one corner radius, one hairline border, and one set of durations. The
+bar is three islands (workspaces / window / status); the launcher is a fourth.
+
+### Launcher
+
+`SUPER + space`. Empty, it shows the time and date. Typing filters applications;
+an arithmetic expression is evaluated inline above the results.
+
+- `↑` `↓` `Tab` move, `Enter` launches, `Esc` closes, click-away closes
+- Ranked matching: exact > name prefix > name substring > keywords > comment > exec
+- Icons resolved against the **live GTK icon theme**, not Qt's
+
+Driven over IPC, so it can be bound from anywhere:
+
+```sh
+qs -p ~/.config/quickshell ipc call launcher toggle
+qs -p ~/.config/quickshell ipc call launcher open
+```
+
+### Compositor support
+
+`services/Compositor.qml` presents one workspace interface over two back ends.
+Hyprland is the target; niri is supported because this setup is often driven
+from a niri session, and a workspace widget you can only check after logging out
+is a workspace widget you cannot check. Hyprland uses the `Quickshell.Hyprland`
+module, niri its JSON event stream.
+
+### GTK
+
+`services/Gtk.qml` reads the desktop's theme, icon theme and font from
+`gsettings`, so the shell matches the rest of the session:
+
+- launcher prose uses the GTK font (`Cantarell`); the bar keeps a Nerd Font
+  because the glyph icons live in it
+- `scripts/apps.py` resolves every app icon through the GTK icon theme and its
+  `Inherits` chain, falling back to `hicolor` and `/usr/share/pixmaps`
+
+Qt only picks up the GTK icon theme when `QT_QPA_PLATFORMTHEME` is configured,
+and it usually is not — hence resolving icons to absolute paths here rather than
+handing names to Qt.
 
 Run it:
 
@@ -149,5 +212,5 @@ deliberately excluded — they are build outputs, not configuration.
 
 ## Next
 
-Still to build in Quickshell: launcher, notification daemon, dashboard,
-power menu, and a lock screen.
+Still to build in Quickshell: notification daemon, dashboard, control
+sidebar, power menu, and a lock screen.
