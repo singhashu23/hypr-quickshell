@@ -142,7 +142,15 @@ Item {
                     // the tile already carries the image's ratio, so fitting
                     // fills it exactly — whole picture, no crop, no bars
                     fillMode: Image.PreserveAspectFit
-                    sourceSize.width: 1200
+
+                    // Decode at the size it is actually painted at, in device
+                    // pixels. Decoding larger and letting the GPU shrink it is
+                    // a bilinear downscale with no mipmap, which is what was
+                    // breaking up the thin diagonals in the art. Keyed off the
+                    // constant cap rather than `width`, which would run back
+                    // through implicitWidth into the tile's own size.
+                    sourceSize.width: Math.round(shell.wallMaxWidth * Math.max(1, Screen.devicePixelRatio))
+                    mipmap: true            // a tile narrower than the cap still shrinks
                     asynchronous: true
                     smooth: true
                     visible: false          // drawn through the mask below
