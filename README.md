@@ -107,7 +107,8 @@ Then run `qs -c hyprland`. `hyprland.conf` already starts it.
 | `CTRL+ALT+T` | random wallpaper, retinting everything |
 
 Inside the launcher: `Tab`/`Shift+Tab` or `←`/`→` switch tabs, `↑`/`↓` move,
-`Enter` activates.
+`Enter` activates. Inside the control centre: `←`/`→` switch tabs, `↑`/`↓`,
+`PageUp`/`PageDown` and `Home`/`End` scroll the pane.
 
 Each surface is also reachable over IPC, which is what the keybinds actually call:
 

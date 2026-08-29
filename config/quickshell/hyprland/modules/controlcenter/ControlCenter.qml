@@ -30,6 +30,11 @@ PanelWindow {
     function toggle() { active ? close() : open() }
     function show(i)  { tab = Math.max(0, Math.min(i, tabs.length - 1)); open() }
 
+    function scrollTo(y) {
+        scroll.contentY = Math.max(0, Math.min(y, Math.max(0, scroll.contentHeight - scroll.height)))
+    }
+    function scrollBy(dy) { scrollTo(scroll.contentY + dy) }
+
     visible: active
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
@@ -49,15 +54,6 @@ PanelWindow {
     MouseArea {
         anchors.fill: parent
         onClicked: root.close()
-    }
-
-    Item {
-        id: keys
-        anchors.fill: parent
-        focus: true
-        Keys.onEscapePressed: root.close()
-        Keys.onUpPressed:   root.tab = (root.tab - 1 + root.tabs.length) % root.tabs.length
-        Keys.onDownPressed: root.tab = (root.tab + 1) % root.tabs.length
     }
 
     Rectangle {
@@ -185,17 +181,55 @@ PanelWindow {
         }
 
         // ---------------- pane ----------------
-        Loader {
-            id: pane
+        // Every pane scrolls, and it is done here rather than in each one:
+        // a pane is a plain Column, so without this the Wi-Fi list, the device
+        // lists and the notification history simply run past the card and get
+        // clipped with no way to reach the rest.
+        Flickable {
+            id: scroll
             anchors { left: sidebar.right; top: parent.top; right: parent.right; bottom: parent.bottom
                       margins: Theme.padding }
-            active: root.active
-            asynchronous: true
-            source: "panes/" + root.tabs[root.tab].file
+            clip: true
+            contentWidth: width
+            contentHeight: pane.height
+            boundsBehavior: Flickable.StopAtBounds
+            flickDeceleration: 6000
+            maximumFlickVelocity: 3000
+
+            // land on the top of a pane when the tab changes, rather than
+            // wherever the last one happened to be scrolled to
+            Connections {
+                target: root
+                function onTabChanged() { scroll.contentY = 0 }
+            }
+
+            Loader {
+                id: pane
+                width: scroll.width
+                height: item ? item.implicitHeight : 0
+                active: root.active
+                asynchronous: true
+                source: "panes/" + root.tabs[root.tab].file
+            }
+        }
+
+        // scrollbar, shown only when there is something to scroll
+        Rectangle {
+            id: bar
+            visible: scroll.contentHeight > scroll.height + 1
+            anchors { right: parent.right; rightMargin: 3 }
+            y: scroll.y + (scroll.contentHeight > 0
+                           ? scroll.contentY / scroll.contentHeight * scroll.height : 0)
+            width: 4
+            height: Math.max(28, scroll.height * scroll.height
+                                 / Math.max(1, scroll.contentHeight))
+            radius: 2
+            color: Theme.alpha(Theme.accent, scroll.moving ? 0.55 : 0.28)
+            Behavior on color { ColorAnimation { duration: Theme.animNormal } }
         }
 
         Text {
-            anchors.centerIn: pane
+            anchors.centerIn: scroll
             visible: pane.status === Loader.Error
             text: "This pane failed to load"
             color: Theme.red
