@@ -70,8 +70,11 @@ PanelWindow {
 
     Item {
         id: card
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: parent.height * 0.18
+        // Whole pixels in both axes. A card on a fractional position is
+        // resampled with a sub-pixel offset, which softens every pixel in it —
+        // that, not the decode size, was what blurred the wallpaper.
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round(parent.height * 0.18)
         width: shell.width
         height: shell.height
 
@@ -97,16 +100,18 @@ PanelWindow {
             readonly property real wallAspect: wall.implicitHeight > 0
                                              ? wall.implicitWidth / wall.implicitHeight
                                              : 16 / 9
-            readonly property real wallWidth:  root.hasWall ? Math.min(wallMaxWidth, wallMaxHeight * wallAspect) : 0
-            readonly property real wallHeight: root.hasWall ? wallWidth / wallAspect : 0
-            readonly property int paneWidth: root.hasWall ? Math.round(wallWidth + wallMargin * 2) : 0
+            // rounded, so the tile lands on the pixel grid rather than
+            // straddling it — same reason as the card's x/y above
+            readonly property int wallWidth:  root.hasWall ? Math.round(Math.min(wallMaxWidth, wallMaxHeight * wallAspect)) : 0
+            readonly property int wallHeight: root.hasWall ? Math.round(wallWidth / wallAspect) : 0
+            readonly property int paneWidth:  root.hasWall ? wallWidth + wallMargin * 2 : 0
 
             // Both axes are fixed. The card is the tile plus its margins, so a
             // growing result list scrolls inside a static body rather than
             // resizing the launcher under the cursor. Only a wallpaper of a
             // different shape moves these, which is what the Behaviors are for.
             width: paneWidth + colWidth
-            height: root.hasWall ? Math.round(wallHeight + wallMargin * 2)
+            height: root.hasWall ? wallHeight + wallMargin * 2
                                  : header.height + 150
             radius: Theme.radius + 4
             color: Theme.island
