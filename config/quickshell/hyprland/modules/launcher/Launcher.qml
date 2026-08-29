@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
@@ -91,8 +92,8 @@ PanelWindow {
             // Capping both axes keeps an ultrawide or portrait wallpaper from
             // running away along its long edge.
             readonly property int wallMargin:    12
-            readonly property int wallMaxWidth:  470
-            readonly property int wallMaxHeight: 340
+            readonly property int wallMaxWidth:  846   // 1.8x
+            readonly property int wallMaxHeight: 612   // 1.8x
             readonly property real wallAspect: wall.implicitHeight > 0
                                              ? wall.implicitWidth / wall.implicitHeight
                                              : 16 / 9
@@ -119,17 +120,20 @@ PanelWindow {
             // ---------- left: the current wallpaper, entire ----------
             // Inset from the card on every side by the same margin, so it reads
             // as a tile resting on the island rather than a bleed off its edge.
-            Rectangle {
+Item {
                 id: wallTile
                 visible: root.hasWall
                 x: shell.wallMargin
                 y: shell.wallMargin
                 width:  shell.wallWidth
                 height: shell.wallHeight
-                radius: Theme.radius
 
-                color: Theme.surface0
-                clip: true
+                // ground under the picture while it decodes
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Theme.radius
+                    color: Theme.surface0
+                }
 
                 Image {
                     id: wall
@@ -138,9 +142,43 @@ PanelWindow {
                     // the tile already carries the image's ratio, so fitting
                     // fills it exactly — whole picture, no crop, no bars
                     fillMode: Image.PreserveAspectFit
-                    sourceSize.width: 800   // downscale on load; the tile is small
+                    sourceSize.width: 1200
                     asynchronous: true
                     smooth: true
+                    visible: false          // drawn through the mask below
+                }
+
+                // Qt's `clip` follows an item's bounding box, not its radius, so
+                // a rounded Rectangle around an Image still shows square corners.
+                // Masking is what actually rounds the picture.
+                Item {
+                    id: wallMask
+                    anchors.fill: parent
+                    layer.enabled: true
+                    visible: false
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Theme.radius
+                        color: "black"
+                    }
+                }
+
+                MultiEffect {
+                    anchors.fill: parent
+                    source: wall
+                    maskEnabled: true
+                    maskSource: wallMask
+                }
+
+                // hairline, so the tile still reads as an edge against a
+                // wallpaper whose own borders happen to be dark
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Theme.radius
+                    color: "transparent"
+                    border.width: Theme.borderWidth
+                    border.color: Theme.border
                 }
             }
 
@@ -149,7 +187,7 @@ PanelWindow {
                 id: header
                 x: shell.paneWidth
                 width: shell.colWidth
-                height: 62
+                height: 70
 
                 Text {
                     id: prompt
@@ -225,7 +263,7 @@ PanelWindow {
                         text: Qt.formatDateTime(clock.date, "HH:mm")
                         color: Theme.text
                         font.family: Theme.uiFont
-                        font.pixelSize: 54
+                        font.pixelSize: 76
                         font.weight: Font.Light
                     }
                     Text {
@@ -233,7 +271,7 @@ PanelWindow {
                         text: Qt.formatDateTime(clock.date, "dddd, d MMMM")
                         color: Theme.overlay
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.fontSize
+                        font.pixelSize: Theme.fontSize + 2
                     }
                 }
 

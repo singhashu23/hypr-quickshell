@@ -71,42 +71,59 @@ def theme_chain(name, seen=None):
     return seen
 
 
+def dir_size(base, dirpath):
+    """Crude size signal from a path, e.g. .../48x48/..., .../apps/32/, /scalable/."""
+    seg = dirpath[len(base):]
+    if "scalable" in seg:
+        return 512
+    size = 0
+    for part in seg.split(os.sep):
+        if part.isdigit():                      # Flatery-style apps/32
+            size = max(size, int(part))
+        elif "x" in part:                       # hicolor-style 48x48
+            head = part.split("x")[0]
+            if head.isdigit():
+                size = max(size, int(head))
+    return size
+
+
 def build_index(themes):
-    """icon name -> best path, preferring larger raster and scalable art."""
+    """icon name -> best path.
+
+    Theme order beats image size. Picking a theme is exactly a statement that
+    its art should win, so an icon the chosen theme ships must outrank a bigger
+    one from further down the Inherits chain — otherwise every app that ships a
+    scalable icon into hicolor overrides the theme and the setting does nothing.
+    Size, then vector over raster, only break ties inside one theme.
+    """
     index = {}
 
-    def consider(name, path, score):
-        if name not in index or score > index[name][1]:
-            index[name] = (path, score)
+    def consider(name, path, rank, size, vector):
+        # lower rank wins; ties fall through to size and then to svg
+        key = (-rank, size, vector)
+        if name not in index or key > index[name][1]:
+            index[name] = (path, key)
 
-    for theme in themes:
+    for rank, theme in enumerate(themes):
         for root_dir in ICON_DIRS:
             base = os.path.join(root_dir, theme)
             if not os.path.isdir(base):
                 continue
             for dirpath, _dirnames, filenames in os.walk(base):
-                # crude size signal from the path, e.g. .../48x48/... or /scalable/
-                seg = dirpath[len(base):]
-                if "scalable" in seg:
-                    size = 512
-                else:
-                    size = 0
-                    for part in seg.split(os.sep):
-                        if "x" in part:
-                            head = part.split("x")[0]
-                            if head.isdigit():
-                                size = max(size, int(head))
+                size = dir_size(base, dirpath)
                 for fn in filenames:
                     if not fn.endswith(EXTS):
                         continue
-                    consider(os.path.splitext(fn)[0],
-                             os.path.join(dirpath, fn), size)
+                    consider(os.path.splitext(fn)[0], os.path.join(dirpath, fn),
+                             rank, size, fn.endswith(".svg"))
 
+    # loose pixmaps sit below every theme
     for p in PIXMAPS:
         if os.path.isdir(p):
             for fn in os.listdir(p):
                 if fn.endswith(EXTS):
-                    consider(os.path.splitext(fn)[0], os.path.join(p, fn), 1)
+                    consider(os.path.splitext(fn)[0], os.path.join(p, fn),
+                             len(themes) + 1, 0, fn.endswith(".svg"))
 
     return {k: v[0] for k, v in index.items()}
 
