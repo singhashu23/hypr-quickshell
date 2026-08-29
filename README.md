@@ -65,7 +65,43 @@ config/quickshell/hyprland/
     Clock.qml            click to toggle seconds
   modules/launcher/
     Launcher.qml         clock at rest; apps + calculator on search
+  modules/notifications/
+    Notifications.qml    org.freedesktop.Notifications daemon + toast stack
+    NotificationCard.qml a single toast, shaped like every other island
 ```
+
+### Notifications
+
+A full D-Bus notification daemon, so `swaync` is not needed. Toasts stack under
+the bar on one screen — duplicating a toast across monitors is noise, not
+redundancy.
+
+- **Critical notifications never auto-expire.** Silently expiring the one that
+  mattered is the failure mode worth designing against; everything else gets
+  4s (low) or 6s (normal), or whatever the sender asks for.
+- **Hovering pauses the countdown**, so reading never races the timer. A hairline
+  along the bottom edge shows the remaining time.
+- **Actions are rendered as buttons.** The previous daemon advertised
+  `actionsSupported` but never drew them, so every actionable notification was a
+  dead end.
+- Notification images (album art, avatars) take precedence over the app icon;
+  a missing icon falls back to a glyph.
+- Click a toast to dismiss; click an action to invoke it and dismiss.
+
+Requires `QT_QPA_PLATFORMTHEME` to be set — see below.
+
+### Qt icon theme
+
+`hyprland.conf` sets `env = QT_QPA_PLATFORMTHEME,qt6ct`. Without it Qt loads no
+icon theme at all, and every `image://icon/…` lookup returns a magenta
+placeholder *with `status === Ready`* — so it cannot even be detected and
+handled in QML. That affects tray icons and notification icons alike.
+
+Note the icon theme is configured in three places that currently disagree:
+`~/.config/gtk-3.0/settings.ini` (`Flattery` — a typo, no such theme),
+`gsettings` (`Flatery`), and `~/.config/qt6ct/qt6ct.conf`
+(`Tela-circle-dracula`). The launcher sidesteps this by resolving icons itself
+through `gsettings`.
 
 ### Design language
 
@@ -225,5 +261,5 @@ deliberately excluded — they are build outputs, not configuration.
 
 ## Next
 
-Still to build in Quickshell: notification daemon, dashboard, control
-sidebar, power menu, and a lock screen.
+Still to build in Quickshell: dashboard, control sidebar, power menu, and a
+lock screen.

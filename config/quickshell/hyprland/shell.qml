@@ -3,6 +3,7 @@
 import Quickshell
 import qs.modules.bar
 import qs.modules.launcher
+import qs.modules.notifications
 
 ShellRoot {
     // one island bar per connected monitor
@@ -12,6 +13,9 @@ ShellRoot {
     }
 
     // single launcher, toggled over IPC:
-    //   qs -p ~/.config/quickshell ipc call launcher toggle
+    //   qs -c hyprland ipc call launcher toggle
     Launcher {}
+
+    // org.freedesktop.Notifications daemon + toast stack
+    Notifications {}
 }
