@@ -2,6 +2,7 @@
 
 import Quickshell
 import qs.modules.bar
+import qs.modules.controlcenter
 import qs.modules.launcher
 import qs.modules.lock
 import qs.modules.powermenu
@@ -28,4 +29,8 @@ ShellRoot {
     // session actions, replacing the rofi powermenu:
     //   qs -c hyprland ipc call powermenu toggle
     PowerMenu {}
+
+    // control centre:
+    //   qs -c hyprland ipc call controlcenter toggle
+    ControlCenter {}
 }

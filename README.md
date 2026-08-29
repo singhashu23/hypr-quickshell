@@ -31,6 +31,10 @@ Replaces waybar, rofi, dunst/swaync and swaylock with a single QML surface.
 ![launcher](screenshots/launcher-apps.png)
 ![launcher windows tab](screenshots/launcher-windows.png)
 
+**Control centre** — eight tabs, in the shape noctalia uses
+
+![control centre](screenshots/control-center.png)
+
 **Power menu** and **lockscreen**
 
 ![power menu](screenshots/powermenu.png)
@@ -47,6 +51,7 @@ Replaces waybar, rofi, dunst/swaync and swaylock with a single QML surface.
 | **Notifications** | A real `org.freedesktop.Notifications` daemon and toast stack. Critical notifications never auto-expire. |
 | **Lockscreen** | `ext-session-lock` with PAM authentication. Blurred wallpaper, clock, dots. `SUPER+L`. |
 | **Power menu** | Lock, log out, suspend, restart, shut down. `SUPER+Q`. |
+| **Control centre** | Sidebar of eight tabs — Home, Audio, Network, Bluetooth, Display, Power, System, Notifications. `SUPER+A`. |
 | **GTK/Qt theme** | `bin/gtk-pywal` generates a pywal-coloured GTK theme and a Qt palette, and reaches libadwaita and Flatpak too. |
 
 Everything follows the wallpaper: change it and the shell, the GTK theme, the Qt
@@ -95,6 +100,7 @@ Then run `qs -c hyprland`. `hyprland.conf` already starts it.
 |---|---|
 | `SUPER+space` | launcher |
 | `SUPER+W` | launcher, open-windows tab |
+| `SUPER+A` | control centre |
 | `SUPER+Q` | power menu |
 | `SUPER+L` | lock |
 | `SUPER+N` | network (`nmtui`) |
@@ -109,6 +115,8 @@ Each surface is also reachable over IPC, which is what the keybinds actually cal
 qs -c hyprland ipc call launcher toggle
 qs -c hyprland ipc call launcher windows
 qs -c hyprland ipc call powermenu toggle
+qs -c hyprland ipc call controlcenter toggle
+qs -c hyprland ipc call controlcenter tab 2   # straight to a tab
 qs -c hyprland ipc call lock lock
 qs -c hyprland ipc call lock unlock     # recovery, if a build ever locks you out
 ```
@@ -126,6 +134,7 @@ config/quickshell/hyprland/
     Gtk.qml              mirrors the desktop's GTK settings
   modules/
     bar/ launcher/ lock/ notifications/ powermenu/
+    controlcenter/       the panel, its shared parts, and panes/ per tab
   scripts/apps.py        parses .desktop files against the live icon theme
 bin/                     wallpaper, theming and session scripts
 config/hypr/             Hyprland config
@@ -158,6 +167,16 @@ white on a `#88A9B0` accent at 2.52:1; comparing both ratios picks black at
 wallpaper collapses to black whenever the palette is itself dark, and the tint
 is scaled separately, because at 4% lightness the palette's own saturation
 reads as flat black.
+
+**Notification history is snapshots, not references.** The server owns a
+notification and drops it the moment it is dismissed, so keeping the object
+would be a dangling read. Do Not Disturb suppresses the *toast*, never the
+record — and urgency is an enum, so it has to be compared as a value:
+`String(urgency)` yields `"2"` and silently matches nothing.
+
+**Control-centre panes load on demand.** Only the tab you are looking at
+exists, so nothing polls `/proc`, `nmcli` or `brightnessctl` in the background
+just because the shell is running.
 
 **The launcher card sits on whole pixels.** A card at a fractional `y` is
 resampled with a sub-pixel offset that softens every pixel in it — that, not

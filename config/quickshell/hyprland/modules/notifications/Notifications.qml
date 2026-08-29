@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Services.Notifications
 import qs
+import qs.services
 
 // The org.freedesktop.Notifications daemon plus its on-screen stack.
 // Sits below the bar on one screen; duplicating a toast across monitors is
@@ -21,8 +22,18 @@ Scope {
         persistenceSupported: true
 
         onNotification: notification => {
-            // keep it alive until we dismiss it ourselves
-            notification.tracked = true
+            // urgency is an enum, so it compares as a value — stringifying it
+            // yields "2", which silently matches nothing
+            const critical = notification.urgency === NotificationUrgency.Critical
+
+            // History is a snapshot taken here, because the server owns the
+            // notification and drops it on dismiss.
+            Notifs.record(notification, critical)
+
+            // Do Not Disturb suppresses the toast, not the record — the whole
+            // point of the history tab is that nothing is silently lost.
+            // Critical notifications ignore it, same as they ignore expiry.
+            notification.tracked = !Notifs.dnd || critical
         }
     }
 
