@@ -85,10 +85,24 @@ PanelWindow {
         Rectangle {
             id: shell
             readonly property int colWidth: 620
-            readonly property int paneWidth: root.hasWall ? 248 : 0
+
+            // The wallpaper tile is a fixed size: it is derived from the image's
+            // own ratio and the caps below, never from the card's current
+            // height, so it holds still as results open and close. Capping both
+            // axes keeps a portrait wallpaper from running away vertically.
+            readonly property int wallMaxWidth:  380
+            readonly property int wallMaxHeight: 300
+            readonly property real wallAspect: wall.implicitHeight > 0
+                                             ? wall.implicitWidth / wall.implicitHeight
+                                             : 16 / 9
+            readonly property real wallWidth:  root.hasWall ? Math.min(wallMaxWidth, wallMaxHeight * wallAspect) : 0
+            readonly property real wallHeight: root.hasWall ? wallWidth / wallAspect : 0
+            readonly property int paneWidth: Math.round(wallWidth)
 
             width: paneWidth + colWidth
-            height: header.height + body.height
+            // at rest the card is exactly as tall as the tile, so the tile sits
+            // flush in the corner; while searching the card grows past it
+            height: Math.max(header.height + body.height, wallHeight)
             radius: Theme.radius + 4
             color: Theme.island
             border.width: Theme.borderWidth
@@ -99,53 +113,36 @@ PanelWindow {
             Behavior on width  { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
 
             // ---------- left: the current wallpaper, entire ----------
-            Item {
-                id: wallPane
+            // Flush with the card's left edge and rounded to match it, square on
+            // the side that meets the search column.
+            Rectangle {
+                id: wallTile
                 visible: root.hasWall
-                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-                width: shell.paneWidth
+                x: 0
+                y: 0
+                width:  shell.wallWidth
+                height: shell.wallHeight
 
-                readonly property real boxWidth:  width  - Theme.padding * 2
-                readonly property real boxHeight: height - Theme.padding * 2
-                // the image's own ratio, taken from the source rather than the
-                // frame, so reading it back to size the frame is not a loop
-                readonly property real aspect: wall.implicitHeight > 0
-                                             ? wall.implicitWidth / wall.implicitHeight
-                                             : 16 / 9
+                // rounded where it meets the card's own corners: always at the
+                // top, and at the bottom only while the tile still reaches it
+                topLeftRadius: shell.radius
+                bottomLeftRadius: height >= shell.height - 0.5 ? shell.radius : 0
+                topRightRadius: 0
+                bottomRightRadius: 0
 
-                // The frame carries the wallpaper's aspect ratio, so the picture
-                // is shown whole — fitted inside the box, never cropped, and with
-                // no letterbox bars left over inside the frame.
-                Rectangle {
-                    anchors.centerIn: parent
-                    width:  Math.min(wallPane.boxWidth, wallPane.boxHeight * wallPane.aspect)
-                    height: width / wallPane.aspect
-                    radius: Theme.radiusSmall
-                    color: Theme.surface0
-                    border.width: Theme.borderWidth
-                    border.color: Theme.border
-                    clip: true
+                color: Theme.surface0
+                clip: true
 
-                    Behavior on width  { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
-                    Behavior on height { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
-
-                    Image {
-                        id: wall
-                        anchors.fill: parent
-                        anchors.margins: Theme.borderWidth
-                        source: root.hasWall ? "file://" + root.wallpaper : ""
-                        fillMode: Image.PreserveAspectFit
-                        sourceSize.width: 720   // downscale on load; the pane is small
-                        asynchronous: true
-                        smooth: true
-                    }
-                }
-
-                Rectangle {
-                    anchors { right: parent.right; top: parent.top; bottom: parent.bottom
-                              topMargin: Theme.padding; bottomMargin: Theme.padding }
-                    width: 1
-                    color: Theme.border
+                Image {
+                    id: wall
+                    anchors.fill: parent
+                    source: root.hasWall ? "file://" + root.wallpaper : ""
+                    // the tile already carries the image's ratio, so fitting
+                    // fills it exactly — whole picture, no crop, no bars
+                    fillMode: Image.PreserveAspectFit
+                    sourceSize.width: 800   // downscale on load; the tile is small
+                    asynchronous: true
+                    smooth: true
                 }
             }
 
@@ -214,7 +211,8 @@ PanelWindow {
                 x: shell.paneWidth
                 width: shell.colWidth
                 height: root.searching ? Math.min(list.contentHeight, 360) + (calcRow.visible ? calcRow.height : 0) + Theme.gap * 2
-                                       : 150
+                       : root.hasWall ? Math.max(120, shell.wallHeight - header.height)
+                                      : 150
 
                 Behavior on height { NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing } }
 
