@@ -34,7 +34,9 @@ import sys
 
 HOME = os.path.expanduser("~")
 WAL = os.path.join(HOME, ".cache/wal/colors.json")
-THEME_DIRS = ["/usr/share/themes", os.path.join(HOME, ".themes")]
+# ~/.themes first: the distro package of a base theme goes stale against new
+# libadwaita releases, and a rebuild from upstream lands in ~/.themes
+THEME_DIRS = [os.path.join(HOME, ".themes"), "/usr/share/themes"]
 
 # text files worth rewriting; everything else is copied through untouched
 TEXT_SUFFIXES = (".css", ".rc", ".gtkrc", ".svg", ".theme", "gtkrc")
@@ -437,11 +439,85 @@ ADW_TEMPLATE = """\
 """
 
 
+SIDEBAR_COMPAT = """\
+
+/* ---- Nautilus sidebar, appended by gtk-pywal -----------------------------
+   Orchis's sidebar block is written for the row GtkPlacesSidebar used to
+   build; Nautilus 50 builds a different one, so the geometry is restated
+   here. {pane} is the sidebar's own background, read back out of the theme
+   rather than assumed, since pywal moves it on every wallpaper.
+
+   The selection: Orchis drew it as a nine-slice PNG sliced 16/9/16/46, and a
+   nine-slice only holds its shape at the height it was cut for - a
+   semicircular cap is not a constant-width band, so the middle slice cannot
+   be stretched. At any other row height the cap lands past the icon with
+   bands above and below. Rebuilt in CSS, which holds at any height and any
+   scale: a pill with a rounded cap on the left, and at the right a flare to
+   the full row height with the sidebar curving into it top and bottom - the
+   reverse radius that makes the row read as merging with the content pane
+   rather than stopping at it.
+
+   One radius (10px) drives the lot: the pill's vertical inset, the flare's
+   concave corners, and the category bubbles' corners. The inset has to equal
+   the notch radius or the arc cuts into the pill edge and leaves a step, and
+   matching the bubbles to it keeps the sidebar on one curve.
+
+   The categories: GTK4 has no :has(), and `separator + row` does not match
+   here, so a group's first and last rows cannot be selected directly. The
+   separator can be, though - given negative margins it overlaps the card
+   above and below and paints {pane} into the four corners to round them off,
+   splitting the one card into a bubble per category. */
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow {{ margin: 4px 0 16px 16px; }}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar {{ padding: 0; }}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > row.activatable {{ margin: 0; padding: 0; }}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > row.activatable label {{ min-height: 34px; padding-left: 6px; }}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > row.activatable > revealer.sidebar-revealer {{ padding: 0; }}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > row.activatable > revealer.sidebar-revealer > box {{ margin: 10px 0; padding-left: 20px; padding-right: 0; }}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > row.activatable:selected > revealer.sidebar-revealer > box {{
+  margin: 10px 10px 10px 8px;
+  padding-left: 18px;
+  background-color: {pane};
+  border-image: none;
+  border-radius: 9999px 0 0 9999px;
+}}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > row.activatable:selected {{
+  background-image:
+    radial-gradient(circle at left top,    transparent 10px, {pane} 10px),
+    radial-gradient(circle at left bottom, transparent 10px, {pane} 10px),
+    linear-gradient({pane}, {pane});
+  background-size: 10px 10px, 10px 10px, 10px 34px;
+  background-position: right top, right bottom, right center;
+  background-repeat: no-repeat;
+}}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > row.activatable:selected label {{ margin-left: 0; padding-left: 2px; }}
+.nautilus-window .sidebar-pane > toolbarview > placessidebar > scrolledwindow > viewport list.navigation-sidebar > separator {{
+  min-height: 34px;
+  margin: -10px 0;
+  background-color: transparent;
+  background-image:
+    radial-gradient(circle at right top,    transparent 10px, {pane} 10px),
+    radial-gradient(circle at left  top,    transparent 10px, {pane} 10px),
+    radial-gradient(circle at right bottom, transparent 10px, {pane} 10px),
+    radial-gradient(circle at left  bottom, transparent 10px, {pane} 10px),
+    linear-gradient({pane}, {pane});
+  background-size: 10px 10px, 10px 10px, 10px 10px, 10px 10px, 100% 14px;
+  background-position: left top, right top, left bottom, right bottom, center center;
+  background-repeat: no-repeat;
+}}
+"""
+
+
 def libadwaita_block(css_path, palette):
     with open(css_path, encoding="utf-8") as f:
         body = f.read()
+    # the sidebar's own background, as the theme just rewrote it - the sidebar
+    # block paints gaps and carves corners in it, and a near miss shows as a
+    # seam, so read it back rather than assume it matches a palette entry
+    m = re.search(r"placessidebar\s*\{\s*background-color:\s*(#[0-9a-fA-F]{6})", body)
+    pane = m.group(1) if m else palette["base"]
     with open(css_path, "w", encoding="utf-8") as f:
-        f.write(ADW_TEMPLATE.format(**palette) + body)
+        f.write(ADW_TEMPLATE.format(**palette) + body
+                + SIDEBAR_COMPAT.format(pane=pane))
 
 
 def wire_gtk(theme_dir, name, palette, quiet):
