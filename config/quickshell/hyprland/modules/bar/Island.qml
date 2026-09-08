@@ -8,6 +8,11 @@ Rectangle {
     default property alias content: layout.data
     property alias spacing: layout.spacing
 
+    // Islands whose contents animate their own width should turn this off, so
+    // the slab tracks them exactly instead of running a second, lagging
+    // animation on top of the first.
+    property bool animateWidth: true
+
     implicitWidth: layout.implicitWidth + Theme.padding * 2
     implicitHeight: Theme.barHeight
 
@@ -21,6 +26,7 @@ Rectangle {
     Behavior on color       { ColorAnimation { duration: Theme.animNormal } }
     Behavior on border.color { ColorAnimation { duration: Theme.animNormal } }
     Behavior on implicitWidth {
+        enabled: root.animateWidth
         NumberAnimation { duration: Theme.animNormal; easing.type: Theme.easing }
     }
 
