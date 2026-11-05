@@ -21,7 +21,7 @@ Singleton {
     property var workspaces: []
 
     function focus(ws) {
-        if (onHyprland) Hyprland.dispatch("workspace " + ws.id)
+        if (onHyprland) Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + ws.id + "\" })")
         else Quickshell.execDetached(["niri", "msg", "action", "focus-workspace", String(ws.id)])
     }
 
@@ -100,7 +100,7 @@ Singleton {
 
     function focusWindow(w) {
         if (!w) return
-        if (onHyprland) Hyprland.dispatch("focuswindow address:" + w.id)
+        if (onHyprland) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + w.id + "\" })")
         else Quickshell.execDetached(["niri", "msg", "action", "focus-window", String(w.id)])
     }
 

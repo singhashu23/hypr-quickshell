@@ -17,7 +17,7 @@ PanelWindow {
         { glyph: "󰌾", name: "Lock",     // reuse the script, so this inherits
                                         // its fallback to swaylock
           run: ["waylandLockscreen"] },
-        { glyph: "󰍃", name: "Log out",  run: ["hyprctl", "dispatch", "exit"] },
+        { glyph: "󰍃", name: "Log out",  run: ["hyprctl", "dispatch", "hl.dsp.exit()"] },
         { glyph: "󰤄", name: "Suspend",  run: ["systemctl", "suspend"] },
         { glyph: "󰜉", name: "Restart",  run: ["systemctl", "reboot"] },
         { glyph: "󰐥", name: "Shut down", run: ["systemctl", "poweroff"] }
